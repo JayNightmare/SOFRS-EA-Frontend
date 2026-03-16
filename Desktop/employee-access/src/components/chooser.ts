@@ -1,11 +1,26 @@
-/* 
+export type ChoiceHandlers = {
+    onEmployee: () => void;
+    onVisitor: () => void;
+};
 
-    * This file is responsible for button choses. It will be used in the main page and the access page. It will be a simple component that will show two buttons, one for the employee and one for the visitor. The employee button will take the user to the employee page and the visitor button will take the user to the visitor page.
+export const createChooser = ({ onEmployee, onVisitor }: ChoiceHandlers): HTMLElement => {
+    const row = document.createElement('div');
+    row.className = 'button-row';
 
-    * Employee Conditions:
-        * If the employee button is clicked, it will take the user to the employee page.
+    const employeeButton = document.createElement('button');
+    employeeButton.className = 'action-btn';
+    employeeButton.type = 'button';
+    employeeButton.textContent = 'I am an employee';
+    employeeButton.addEventListener('click', onEmployee);
 
-    * Visitor Conditions:
-        * If the visitor button is clicked, it will take the user to the visitor page.
+    const visitorButton = document.createElement('button');
+    visitorButton.className = 'action-btn';
+    visitorButton.type = 'button';
+    visitorButton.dataset.variant = 'secondary';
+    visitorButton.textContent = 'I am a visitor';
+    visitorButton.addEventListener('click', onVisitor);
 
-*/
+    row.append(employeeButton, visitorButton);
+
+    return row;
+};

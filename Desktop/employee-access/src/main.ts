@@ -10,8 +10,11 @@ if (started) {
 const createWindow = () => {
   // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 800,
-    height: 600,
+    width: 720,
+    height: 1280,
+    minWidth: 420,
+    minHeight: 740,
+    autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
     },
@@ -26,8 +29,10 @@ const createWindow = () => {
     );
   }
 
-  // Open the DevTools.
-  mainWindow.webContents.openDevTools();
+  mainWindow.webContents.session.setPermissionRequestHandler((_, permission, callback) => {
+    const allowedPermissions = new Set(['media']);
+    callback(allowedPermissions.has(permission));
+  });
 };
 
 // This method will be called when Electron has finished

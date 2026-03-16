@@ -1,14 +1,90 @@
-/* 
-    * This file will be a component to show the face of the employee, it will be used in the main page and the access page. It will be a simple component that will show the face of the employee and the name of the employee, greeting them. 
+type StatusTone = 'ok' | 'warn' | 'error';
 
-    * Employee Conditions:
-        * If the employee is recognized, it will show a message saying that the employee is recognized and will greet them by their name. It will also show a message saying that the employee can access the building and will grant them access.
+export type CameraPane = {
+    element: HTMLElement;
+    start: () => Promise<void>;
+    stop: () => void;
+    setStatus: (label: string, tone?: StatusTone) => void;
+};
 
-        * If the employee is not recognized, it will show a message saying that the employee is not recognized and will ask them to try again.
+const createStatusChip = (): HTMLSpanElement => {
+    const chip = document.createElement('span');
+    chip.className = 'status-chip';
+    chip.textContent = 'Camera idle';
+    chip.dataset.tone = 'warn';
+    return chip;
+};
 
-    * Visitor Conditions:
-        * If the visitor is recognized, it will show a message saying that the visitor is recognized and will ask them to wait for the employee to grant access.
-            * If the employee is recognized, it will show a message saying that the employee is recognized and will ask them to wait for the employee to grant access.
-            * If the employee is not recognized, it will show a message saying that the employee is not recognized and will ask them to try again.
-        * If the visitor is not recognized, it will show a message saying that the visitor is not recognized and will ask them to try again.
-*/
+export const createFacePane = (): CameraPane => {
+    const frame = document.createElement('section');
+    frame.className = 'camera-frame';
+
+    const statusChip = createStatusChip();
+
+    const video = document.createElement('video');
+    video.className = 'camera-video';
+    video.playsInline = true;
+    video.muted = true;
+    video.autoplay = true;
+
+    const placeholder = document.createElement('div');
+    placeholder.className = 'camera-placeholder';
+    placeholder.textContent = 'Live camera preview';
+
+    frame.append(statusChip, video, placeholder);
+
+    let stream: MediaStream | null = null;
+
+    const setStatus = (label: string, tone: StatusTone = 'warn'): void => {
+        statusChip.textContent = label;
+        statusChip.dataset.tone = tone;
+    };
+
+    const start = async (): Promise<void> => {
+        if (!navigator.mediaDevices?.getUserMedia) {
+            setStatus('Camera unsupported', 'error');
+            placeholder.textContent = 'Camera API is unavailable on this device.';
+            return;
+        }
+
+        try {
+            stream = await navigator.mediaDevices.getUserMedia({
+                video: {
+                    facingMode: 'user',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 },
+                },
+                audio: false,
+            });
+            video.srcObject = stream;
+            placeholder.style.display = 'none';
+            setStatus('Camera online', 'ok');
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown camera error';
+            setStatus('Camera blocked', 'error');
+            placeholder.style.display = 'flex';
+            placeholder.textContent = `Unable to open camera: ${message}`;
+        }
+    };
+
+    const stop = (): void => {
+        if (!stream) {
+            return;
+        }
+
+        stream.getTracks().forEach((track) => {
+            track.stop();
+        });
+        stream = null;
+        video.srcObject = null;
+        placeholder.style.display = 'flex';
+        setStatus('Camera stopped', 'warn');
+    };
+
+    return {
+        element: frame,
+        start,
+        stop,
+        setStatus,
+    };
+};

@@ -1,12 +1,106 @@
-/* 
+import { createFacePane } from '../components/face';
 
-    * This file is responsible for handling employee access. It will be used to detect the face of the employee and grant them access to the building. It will also be used to show the employee page, which will show the employee's name and a message saying that they have access to the building.
+export type EmployeePageView = {
+    element: HTMLElement;
+    onShow: () => Promise<void>;
+    onHide: () => void;
+};
 
-    * Employee Conditions:
-        * If the employee is recognized, it will show a message saying that the employee is recognized and will greet them by their name. It will also show a message saying that the employee can access the building and will grant them access.
-        
-        * If the employee is not recognized due to:
-            * Face not being detected: It will show a message saying that the face is not detected and will ask them to try again.
-            * Face not in database: It will show a message saying they are not an employee and will bring them to the visitor page.
+export type EmployeePageHandlers = {
+    onBack: () => void;
+    onGoVisitor: () => void;
+};
 
-*/
+const randomEmployeeOutcome = (): 'recognized' | 'face-missed' | 'not-employee' => {
+    const roll = Math.random();
+    if (roll > 0.62) {
+        return 'recognized';
+    }
+    if (roll > 0.28) {
+        return 'face-missed';
+    }
+    return 'not-employee';
+};
+
+export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers): EmployeePageView => {
+    const shell = document.createElement('main');
+    shell.className = 'kiosk-shell';
+
+    const camera = createFacePane();
+    const panel = document.createElement('section');
+    panel.className = 'content-panel';
+
+    const title = document.createElement('h1');
+    title.className = 'headline';
+    title.textContent = 'Employee Verification';
+
+    const details = document.createElement('p');
+    details.className = 'copy';
+    details.textContent =
+        'Hold steady for face verification. The system checks if your profile exists in employee records.';
+
+    const result = document.createElement('div');
+    result.className = 'result-banner';
+    result.textContent = 'Waiting to scan...';
+
+    const actions = document.createElement('div');
+    actions.className = 'button-row';
+
+    const backButton = document.createElement('button');
+    backButton.className = 'action-btn';
+    backButton.type = 'button';
+    backButton.textContent = 'Back';
+    backButton.addEventListener('click', onBack);
+
+    const visitorButton = document.createElement('button');
+    visitorButton.className = 'action-btn';
+    visitorButton.type = 'button';
+    visitorButton.dataset.variant = 'secondary';
+    visitorButton.textContent = 'Switch to visitor';
+    visitorButton.addEventListener('click', onGoVisitor);
+
+    actions.append(backButton, visitorButton);
+    panel.append(title, details, result, actions);
+    shell.append(camera.element, panel);
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+
+    return {
+        element: shell,
+        onShow: async () => {
+            result.dataset.tone = 'warn';
+            result.textContent = 'Scanning for employee profile...';
+            camera.setStatus('Scanning face', 'warn');
+            await camera.start();
+
+            timer = setTimeout(() => {
+                const outcome = randomEmployeeOutcome();
+
+                if (outcome === 'recognized') {
+                    camera.setStatus('Employee recognized', 'ok');
+                    result.dataset.tone = 'ok';
+                    result.textContent = 'Welcome, employee. Access granted.';
+                    return;
+                }
+
+                if (outcome === 'face-missed') {
+                    camera.setStatus('Face not detected', 'warn');
+                    result.dataset.tone = 'warn';
+                    result.textContent = 'Face not clearly detected. Please align with the camera and retry.';
+                    return;
+                }
+
+                camera.setStatus('Not in employee DB', 'error');
+                result.dataset.tone = 'error';
+                result.textContent = 'No employee profile matched. Use visitor flow to continue.';
+            }, 2200);
+        },
+        onHide: () => {
+            if (timer) {
+                clearTimeout(timer);
+                timer = null;
+            }
+            camera.stop();
+        },
+    };
+};
