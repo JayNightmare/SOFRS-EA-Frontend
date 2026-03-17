@@ -5,10 +5,10 @@ This repo will be for the Smart Office Face Recognition System for Employee Acce
 ## Table of Contents
 
 - [SOFRS-EA - Frontend](#sofrs-ea---frontend)
-     - [Table of Contents](#table-of-contents)
-     - [Team](#team)
-          - [Backend Developers](#backend-developers)
-          - [Frontend Developers](#frontend-developers)
+  - [Table of Contents](#table-of-contents)
+  - [Team](#team)
+    - [Backend Developers](#backend-developers)
+    - [Frontend Developers](#frontend-developers)
 
 ## Team
 
@@ -19,7 +19,7 @@ This team will work on the facial recognition, relying on the Frontend team to p
 > [!NOTE]
 > Subject to change
 
-Adem & Jay
+Javier & Jay
 
 ### Frontend Developers
 
@@ -28,4 +28,4 @@ This team will work on the facial tracking, ensuring that the camera detects the
 > [!NOTE]
 > Subject to change
 
-Connor & Javier
+Connor & Adem
