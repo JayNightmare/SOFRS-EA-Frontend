@@ -11,17 +11,6 @@ export type EmployeePageHandlers = {
     onGoVisitor: () => void;
 };
 
-const randomEmployeeOutcome = (): 'recognized' | 'face-missed' | 'not-employee' => {
-    const roll = Math.random();
-    if (roll > 0.62) {
-        return 'recognized';
-    }
-    if (roll > 0.28) {
-        return 'face-missed';
-    }
-    return 'not-employee';
-};
-
 export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers): EmployeePageView => {
     const shell = document.createElement('main');
     shell.className = 'kiosk-shell';
@@ -63,7 +52,59 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
     panel.append(title, details, result, actions);
     shell.append(camera.element, panel);
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
+    let timer: ReturnType<typeof setInterval> | null = null;
+    let isDetecting = false;
+
+    const runDetection = async (): Promise<void> => {
+        if (isDetecting) {
+            return;
+        }
+
+        const frameTensor = camera.captureFrameTensor(640);
+
+        if (!frameTensor) {
+            camera.setStatus('Camera warming up', 'warn');
+            result.dataset.tone = 'warn';
+            result.textContent = 'Preparing camera frame...';
+            return;
+        }
+
+        isDetecting = true;
+
+        try {
+            const response = await window.detector.detectFace({
+                tensor: Array.from(frameTensor),
+                width: 640,
+                height: 640,
+                threshold: 0.35,
+            });
+
+            if (!response.modelReady) {
+                camera.setStatus('Detector unavailable', 'error');
+                result.dataset.tone = 'error';
+                result.textContent = `Face detector unavailable: ${response.message}`;
+                return;
+            }
+
+            if (response.detected) {
+                camera.setStatus('Face detected', 'ok');
+                result.dataset.tone = 'ok';
+                result.textContent = `Face detected (${(response.confidence * 100).toFixed(1)}%). Employee verification can continue.`;
+                return;
+            }
+
+            camera.setStatus('No face detected', 'warn');
+            result.dataset.tone = 'warn';
+            result.textContent = `No face detected (${(response.confidence * 100).toFixed(1)}%). Align with the camera and hold still.`;
+        } catch (error) {
+            const message = error instanceof Error ? error.message : 'Unknown detection error';
+            camera.setStatus('Detection error', 'error');
+            result.dataset.tone = 'error';
+            result.textContent = `Face detection error: ${message}`;
+        } finally {
+            isDetecting = false;
+        }
+    };
 
     return {
         element: shell,
@@ -73,31 +114,14 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
             camera.setStatus('Scanning face', 'warn');
             await camera.start();
 
-            timer = setTimeout(() => {
-                const outcome = randomEmployeeOutcome();
-
-                if (outcome === 'recognized') {
-                    camera.setStatus('Employee recognized', 'ok');
-                    result.dataset.tone = 'ok';
-                    result.textContent = 'Welcome, employee. Access granted.';
-                    return;
-                }
-
-                if (outcome === 'face-missed') {
-                    camera.setStatus('Face not detected', 'warn');
-                    result.dataset.tone = 'warn';
-                    result.textContent = 'Face not clearly detected. Please align with the camera and retry.';
-                    return;
-                }
-
-                camera.setStatus('Not in employee DB', 'error');
-                result.dataset.tone = 'error';
-                result.textContent = 'No employee profile matched. Use visitor flow to continue.';
-            }, 2200);
+            await runDetection();
+            timer = setInterval(() => {
+                void runDetection();
+            }, 900);
         },
         onHide: () => {
             if (timer) {
-                clearTimeout(timer);
+                clearInterval(timer);
                 timer = null;
             }
             camera.stop();

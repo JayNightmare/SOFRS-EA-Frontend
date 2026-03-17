@@ -5,6 +5,7 @@ export type CameraPane = {
     start: () => Promise<void>;
     stop: () => void;
     setStatus: (label: string, tone?: StatusTone) => void;
+    captureFrameTensor: (targetSize?: number) => Float32Array | null;
 };
 
 const createStatusChip = (): HTMLSpanElement => {
@@ -34,6 +35,8 @@ export const createFacePane = (): CameraPane => {
     frame.append(statusChip, video, placeholder);
 
     let stream: MediaStream | null = null;
+    const canvas = document.createElement('canvas');
+    const context = canvas.getContext('2d', { willReadFrequently: true });
 
     const setStatus = (label: string, tone: StatusTone = 'warn'): void => {
         statusChip.textContent = label;
@@ -81,10 +84,39 @@ export const createFacePane = (): CameraPane => {
         setStatus('Camera stopped', 'warn');
     };
 
+    const captureFrameTensor = (targetSize = 640): Float32Array | null => {
+        if (!context) {
+            return null;
+        }
+
+        if (!video.videoWidth || !video.videoHeight) {
+            return null;
+        }
+
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        context.drawImage(video, 0, 0, targetSize, targetSize);
+
+        const imageData = context.getImageData(0, 0, targetSize, targetSize);
+        const pixelData = imageData.data;
+        const planeSize = targetSize * targetSize;
+        const tensor = new Float32Array(planeSize * 3);
+
+        for (let index = 0; index < planeSize; index += 1) {
+            const pixelOffset = index * 4;
+            tensor[index] = (pixelData[pixelOffset] ?? 0) / 255;
+            tensor[planeSize + index] = (pixelData[pixelOffset + 1] ?? 0) / 255;
+            tensor[(planeSize * 2) + index] = (pixelData[pixelOffset + 2] ?? 0) / 255;
+        }
+
+        return tensor;
+    };
+
     return {
         element: frame,
         start,
         stop,
         setStatus,
+        captureFrameTensor,
     };
 };
