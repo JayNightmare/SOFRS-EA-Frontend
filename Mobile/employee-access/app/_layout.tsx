@@ -1,24 +1,37 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import "react-native-reanimated";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
-
-export const unstable_settings = {
-  anchor: '(tabs)',
-};
+import { UserProvider } from "../contexts/user-context";
+import { AppColors } from "@/constants/theme";
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
-
-  return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
-      <Stack>
-        <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
-      </Stack>
-      <StatusBar style="auto" />
-    </ThemeProvider>
-  );
+	return (
+		<UserProvider>
+			<Stack
+				screenOptions={{
+					headerShown: false,
+					contentStyle: {
+						backgroundColor:
+							AppColors.background,
+					},
+					animation: "slide_from_right",
+				}}
+			>
+				<Stack.Screen name="index" />
+				<Stack.Screen name="identity-verification" />
+				<Stack.Screen name="face-setup" />
+				<Stack.Screen name="face-scan" />
+				<Stack.Screen name="setup-success" />
+				<Stack.Screen
+					name="(dashboard)"
+					options={{
+						gestureEnabled: false,
+						animation: "fade",
+					}}
+				/>
+			</Stack>
+			<StatusBar style="light" />
+		</UserProvider>
+	);
 }
