@@ -1,50 +1,42 @@
-# Welcome to your Expo app 👋
+# SOFRS-EA Mobile App
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+This is the React Native (Expo) mobile frontend for the Smart Office Face Recognition System for Employee Access (SOFRS-EA).
 
-## Get started
+## Prerequisites
 
-1. Install dependencies
+- Node.js (v18+)
+- npm or yarn
+- Expo Go app on your physical device, or an iOS Simulator / Android Emulator
 
+## Setup Instructions
+
+1. **Install dependencies**
+   Navigate to the mobile app directory and install the necessary packages.
    ```bash
+   cd Mobile/employee-access
    npm install
    ```
+   *(Note: If you encounter issues with `node_modules`, ensure you have the correct permissions and clear your npm cache if necessary).*
 
-2. Start the app
-
+2. **Environment Configuration**
+   Copy the example environment file and update it with your backend details.
    ```bash
-   npx expo start
+   cp .env.example .env
    ```
+   Update the `.env` file with your credentials:
+   - `EXPO_PUBLIC_API_BASE_URL`: URL of the backend service (default: `http://localhost:8000`)
+   - `EXPO_PUBLIC_API_KEY`: Your API Key for backend communication
 
-In the output, you'll find options to open the app in a
+3. **Start the Development Server**
+   Start Expo's local server:
+   ```bash
+   npm start
+   ```
+   From the terminal interface, you can:
+   - Press `a` to open in Android Emulator
+   - Press `i` to open in iOS Simulator
+   - Scan the QR code using the Expo Go application on your physical device
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+## Project Details
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
-```
-
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
-
-## Learn more
-
-To learn more about developing your project with Expo, look at the following resources:
-
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
-
-## Join the community
-
-Join our community of developers creating universal apps.
-
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+This app is built with Expo 54 and React Native 0.81. It utilizes Expo Router (v6) for stack-based navigation through a custom 6-screen onboarding flow (Welcome -> Identity Verification -> Face Setup -> Face Scan -> Setup Success -> Dashboard). It integrates `expo-camera` for capturing facial data, which can then be securely sent to the SOFRS-EA backend for processing.
