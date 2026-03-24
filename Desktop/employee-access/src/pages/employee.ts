@@ -1,3 +1,4 @@
+import { searchImage, ApiError } from '../api';
 import { createFacePane } from '../components/face';
 
 export type EmployeePageView = {
@@ -54,6 +55,7 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
 
     let timer: ReturnType<typeof setInterval> | null = null;
     let isDetecting = false;
+    let hasSearchedBackend = false;
 
     const runDetection = async (): Promise<void> => {
         if (isDetecting) {
@@ -88,8 +90,27 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
 
             if (response.detected) {
                 camera.setStatus('Face detected', 'ok');
-                result.dataset.tone = 'ok';
-                result.textContent = `Face detected (${(response.confidence * 100).toFixed(1)}%). Employee verification can continue.`;
+                if (!hasSearchedBackend) {
+                    hasSearchedBackend = true;
+                    const blob = await camera.captureFrameBlob();
+                    if (blob) {
+                        try {
+                            const searchResult = await searchImage(blob);
+                            result.dataset.tone = 'ok';
+                            result.textContent = searchResult.message;
+                        } catch (err) {
+                            hasSearchedBackend = false;
+                            const msg = err instanceof ApiError ? err.message : 'Cannot reach server';
+                            camera.setStatus('API error', 'error');
+                            result.dataset.tone = 'error';
+                            result.textContent = msg;
+                        }
+                    } else {
+                        hasSearchedBackend = false;
+                    }
+                } else {
+                    result.textContent = result.textContent || 'Face verified.';
+                }
                 return;
             }
 
@@ -109,15 +130,14 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
     return {
         element: shell,
         onShow: async () => {
+            hasSearchedBackend = false;
             result.dataset.tone = 'warn';
             result.textContent = 'Scanning for employee profile...';
             camera.setStatus('Scanning face', 'warn');
             await camera.start();
 
             await runDetection();
-            timer = setInterval(() => {
-                void runDetection();
-            }, 900);
+            timer = setInterval(() => void runDetection(), 900);
         },
         onHide: () => {
             if (timer) {

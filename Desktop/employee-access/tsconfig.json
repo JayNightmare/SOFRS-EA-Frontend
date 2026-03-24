@@ -2,15 +2,15 @@
 	"compilerOptions": {
 		"target": "ESNext",
 		"module": "ESNext",
-		"ignoreDeprecations": "6.0",
 		"allowJs": true,
 		"skipLibCheck": true,
 		"esModuleInterop": true,
-		"noUncheckedSideEffectImports": false,
 		"noImplicitAny": true,
 		"sourceMap": true,
 		"outDir": "dist",
 		"moduleResolution": "bundler",
-		"resolveJsonModule": true
+		"resolveJsonModule": true,
+		"strict": true,
+		"forceConsistentCasingInFileNames": true
 	}
 }

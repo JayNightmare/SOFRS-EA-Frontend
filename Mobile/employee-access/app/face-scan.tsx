@@ -13,6 +13,7 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import Svg, { Ellipse, Line, Path } from 'react-native-svg';
 
 import { useUser } from '@/contexts/user-context';
+import { uploadImages, ApiError } from '@/lib/api';
 import { AppColors, AppSpacing, AppBorderRadius, AppFontSizes } from '@/constants/theme';
 import { FACE_POSITIONS, POSITION_INSTRUCTIONS, type FaceCapturePosition } from '@/constants/types';
 
@@ -50,11 +51,39 @@ function StatusChip({ label, positive }: StatusChipData) {
   );
 }
 
+function base64ToBlob(base64: string): Blob {
+  const binary = atob(base64);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return new Blob([bytes], { type: 'image/jpeg' });
+}
+
 export default function FaceScanScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setFaceScanResult } = useUser();
+  const { setFaceScanResult, recordId, faceScanResult } = useUser();
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const cameraRef = useRef<CameraView>(null);
+
+  const handleRetryUpload = useCallback(async () => {
+    if (!recordId || isUploading) return;
+    const valid = Object.entries(faceScanResult).filter(
+      ([, v]) => v && !v.startsWith('simulated_')
+    );
+    if (valid.length === 0) return;
+    setUploadError(null);
+    setIsUploading(true);
+    try {
+      const blobs = valid.map(([, b64]) => base64ToBlob(b64));
+      await uploadImages(recordId, blobs);
+      router.replace('/setup-success');
+    } catch (err) {
+      setUploadError(err instanceof ApiError ? err.message : 'Upload failed');
+    } finally {
+      setIsUploading(false);
+    }
+  }, [recordId, faceScanResult, isUploading, router]);
 
   const [permission, requestPermission] = useCameraPermissions();
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -93,18 +122,35 @@ export default function FaceScanScreen() {
             setCaptureStatus('waiting');
           }, 800);
         } else {
-          // All captures complete — run stub verification
+          // All captures complete — upload to backend if we have recordId and real images
           setFaceScanResult(newCaptures);
-          setTimeout(() => {
-            router.replace('/setup-success');
-          }, 1000);
+          setUploadError(null);
+          const validCaptures = Object.entries(newCaptures).filter(
+            ([, v]) => v && !v.startsWith('simulated_')
+          );
+          if (recordId && validCaptures.length > 0) {
+            setIsUploading(true);
+            try {
+              const blobs = validCaptures.map(([, b64]) => base64ToBlob(b64));
+              await uploadImages(recordId, blobs);
+              setTimeout(() => router.replace('/setup-success'), 1000);
+            } catch (err) {
+              const msg = err instanceof ApiError ? err.message : 'Upload failed';
+              setUploadError(msg);
+              setHoldStill(false);
+            } finally {
+              setIsUploading(false);
+            }
+          } else {
+            setTimeout(() => router.replace('/setup-success'), 1000);
+          }
         }
       }
     } catch {
       setCaptureStatus('waiting');
       setHoldStill(false);
     }
-  }, [captureStatus, captures, currentIndex, currentPosition, router, setFaceScanResult]);
+  }, [captureStatus, captures, currentIndex, currentPosition, recordId, router, setFaceScanResult]);
 
   // Simulate capture for web / no-camera environments
   const handleSimulatedCapture = useCallback(() => {
@@ -127,9 +173,8 @@ export default function FaceScanScreen() {
         }, 600);
       } else {
         setFaceScanResult(newCaptures);
-        setTimeout(() => {
-          router.replace('/setup-success');
-        }, 800);
+        // Simulated captures: skip upload, proceed to success
+        setTimeout(() => router.replace('/setup-success'), 800);
       }
     }, 500);
   }, [captureStatus, captures, currentIndex, currentPosition, router, setFaceScanResult]);
@@ -268,12 +313,27 @@ export default function FaceScanScreen() {
           <Text style={styles.progressPercent}>{Math.round(progress)}%</Text>
         </View>
         <Text style={styles.scanningText}>
-          {captureStatus === 'capturing'
-            ? 'Capturing...'
-            : captureStatus === 'captured'
-              ? 'Position captured!'
-              : `Scanning Biometrics... (${currentIndex + 1}/${FACE_POSITIONS.length})`}
+          {isUploading
+            ? 'Uploading...'
+            : captureStatus === 'capturing'
+              ? 'Capturing...'
+              : captureStatus === 'captured'
+                ? 'Position captured!'
+                : `Scanning Biometrics... (${currentIndex + 1}/${FACE_POSITIONS.length})`}
         </Text>
+
+        {uploadError ? (
+          <View style={styles.uploadErrorBox}>
+            <Text style={styles.uploadErrorText}>{uploadError}</Text>
+            <Pressable
+              style={({ pressed }) => [styles.retryButton, pressed && { opacity: 0.8 }]}
+              onPress={handleRetryUpload}
+              disabled={isUploading}
+            >
+              <Text style={styles.retryButtonText}>Retry upload</Text>
+            </Pressable>
+          </View>
+        ) : null}
 
         {/* Progress bar */}
         <View style={styles.progressBar}>
@@ -473,6 +533,30 @@ const styles = StyleSheet.create({
   positionDotText: {
     fontSize: AppFontSizes.xs,
     fontWeight: '700',
+    color: AppColors.textPrimary,
+  },
+  uploadErrorBox: {
+    backgroundColor: 'rgba(239, 68, 68, 0.15)',
+    borderWidth: 1,
+    borderColor: AppColors.error,
+    borderRadius: AppBorderRadius.md,
+    padding: AppSpacing.md,
+    marginBottom: AppSpacing.md,
+  },
+  uploadErrorText: {
+    fontSize: AppFontSizes.sm,
+    color: AppColors.error,
+    marginBottom: AppSpacing.sm,
+  },
+  retryButton: {
+    backgroundColor: AppColors.accent,
+    borderRadius: AppBorderRadius.md,
+    paddingVertical: AppSpacing.sm,
+    alignItems: 'center',
+  },
+  retryButtonText: {
+    fontSize: AppFontSizes.sm,
+    fontWeight: '600',
     color: AppColors.textPrimary,
   },
   chipRow: {

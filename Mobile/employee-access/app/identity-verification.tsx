@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { createEmployee, createVisitor, ApiError } from '@/lib/api';
 import {
   KeyboardAvoidingView,
   Platform,
@@ -22,7 +23,9 @@ export default function IdentityVerificationScreen() {
   const initialRole: UserRole = rawRole === 'visitor' ? 'visitor' : 'employee';
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setUserData } = useUser();
+  const { setUserData, setRecordId } = useUser();
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
   const [fullName, setFullName] = useState('');
@@ -37,18 +40,34 @@ export default function IdentityVerificationScreen() {
     return true;
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (!isFormValid()) return;
-
-    setUserData({
-      role: selectedRole,
-      fullName: fullName.trim(),
-      idNumber: selectedRole === 'employee' ? idNumber.trim() : `VIS-${Date.now()}`,
-      companionName: selectedRole === 'visitor' ? companionName.trim() : undefined,
-      phone: selectedRole === 'visitor' && phone.trim() ? phone.trim() : undefined,
-    });
-
-    router.push('/face-setup');
+    setError(null);
+    setIsSubmitting(true);
+    try {
+      const fullNameTrim = fullName.trim();
+      const phoneTrim = selectedRole === 'visitor' && phone.trim() ? phone.trim() : undefined;
+      if (selectedRole === 'employee') {
+        const created = await createEmployee({ fullName: fullNameTrim, email: idNumber.trim() || undefined });
+        setRecordId(created.id);
+      } else {
+        const created = await createVisitor({ fullName: fullNameTrim, Phone: phoneTrim });
+        setRecordId(created.id);
+      }
+      setUserData({
+        role: selectedRole,
+        fullName: fullNameTrim,
+        idNumber: selectedRole === 'employee' ? idNumber.trim() : `VIS-${Date.now()}`,
+        companionName: selectedRole === 'visitor' ? companionName.trim() : undefined,
+        phone: phoneTrim,
+      });
+      router.push('/face-setup');
+    } catch (err) {
+      const msg = err instanceof ApiError ? err.message : 'Cannot reach server';
+      setError(msg);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -230,6 +249,12 @@ export default function IdentityVerificationScreen() {
           </>
         )}
 
+        {error ? (
+          <View style={[styles.infoCard, { borderColor: AppColors.error ?? '#dc2626', marginBottom: AppSpacing.md }]}>
+            <Text style={[styles.infoTitle, { color: AppColors.error ?? '#dc2626' }]}>{error}</Text>
+          </View>
+        ) : null}
+
         {/* Info card */}
         <View style={styles.infoCard}>
           <View style={styles.infoCardHeader}>
@@ -261,13 +286,15 @@ export default function IdentityVerificationScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.continueButton,
-            !isFormValid() && styles.continueButtonDisabled,
-            pressed && isFormValid() && styles.buttonPressed,
+            (!isFormValid() || isSubmitting) && styles.continueButtonDisabled,
+            pressed && isFormValid() && !isSubmitting && styles.buttonPressed,
           ]}
           onPress={handleContinue}
-          disabled={!isFormValid()}
+          disabled={!isFormValid() || isSubmitting}
         >
-          <Text style={styles.continueButtonText}>Continue Verification →</Text>
+          <Text style={styles.continueButtonText}>
+            {isSubmitting ? 'Creating...' : 'Continue Verification →'}
+          </Text>
         </Pressable>
 
         <Text style={styles.footerText}>

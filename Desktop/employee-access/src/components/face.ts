@@ -6,6 +6,7 @@ export type CameraPane = {
     stop: () => void;
     setStatus: (label: string, tone?: StatusTone) => void;
     captureFrameTensor: (targetSize?: number) => Float32Array | null;
+    captureFrameBlob: () => Promise<Blob | null>;
 };
 
 const createStatusChip = (): HTMLSpanElement => {
@@ -112,11 +113,25 @@ export const createFacePane = (): CameraPane => {
         return tensor;
     };
 
+    const captureFrameBlob = (): Promise<Blob | null> =>
+        new Promise((resolve) => {
+            if (!context || !video.videoWidth || !video.videoHeight) {
+                resolve(null);
+                return;
+            }
+            const size = 640;
+            canvas.width = size;
+            canvas.height = size;
+            context.drawImage(video, 0, 0, size, size);
+            canvas.toBlob((blob) => resolve(blob ?? null), 'image/jpeg', 0.9);
+        });
+
     return {
         element: frame,
         start,
         stop,
         setStatus,
         captureFrameTensor,
+        captureFrameBlob,
     };
 };

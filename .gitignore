@@ -146,3 +146,5 @@ vite.config.ts.timestamp-*
 YOLOv26/
 
 .DS_Store
+
+Backend/
