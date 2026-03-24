@@ -1,127 +1,7 @@
-// Returns true if the face is reasonably centered and large enough
-const isForegroundFace = (box: FaceBox): boolean => {
-  // These thresholds can be tuned for your use case
-  const minSize = 0.22; // Minimum width/height for foreground
-  const maxOffset = 0.28; // How far from center allowed
-  const centerX = box.x + box.width / 2;
-  const centerY = box.y + box.height / 2;
-  const isCentered =
-    Math.abs(centerX - 0.5) < maxOffset && Math.abs(centerY - 0.5) < maxOffset;
-  const isLargeEnough = box.width > minSize && box.height > minSize;
-  return isCentered && isLargeEnough;
-};
-// Main face detection logic
-const runFaceDetection = async (
-  request: FaceDetectionRequest,
-): Promise<FaceDetectionResponse> => {
-  const expectedLength = request.width * request.height * 3;
-  if (request.tensor.length !== expectedLength) {
-    return {
-      detected: false,
-      confidence: 0,
-      modelReady: false,
-      message: `Invalid tensor size. Expected ${expectedLength}, received ${request.tensor.length}.`,
-      faceCount: 0,
-      reasonCode: "invalid-input",
-      hasSingleForegroundFace: false,
-      primaryFace: null,
-      faces: [],
-    };
-  }
-
-  const session = await ensureFaceSession();
-  const onnx = await loadOnnxModule();
-  const inputName = session.inputNames[0];
-  if (!inputName) {
-    return {
-      detected: false,
-      confidence: 0,
-      modelReady: false,
-      message: "Model input is unavailable.",
-      faceCount: 0,
-      reasonCode: "model-error",
-      hasSingleForegroundFace: false,
-      primaryFace: null,
-      faces: [],
-    };
-  }
-
-  const inputTensor = new onnx.Tensor(
-    "float32",
-    Float32Array.from(request.tensor),
-    [1, 3, request.height, request.width],
-  );
-  const outputs = await session.run({ [inputName]: inputTensor });
-  const firstOutputName = session.outputNames[0];
-  const firstOutput = firstOutputName ? outputs[firstOutputName] : undefined;
-  if (!firstOutput) {
-    return {
-      detected: false,
-      confidence: 0,
-      modelReady: false,
-      message: "Model output is unavailable.",
-      faceCount: 0,
-      reasonCode: "model-error",
-      hasSingleForegroundFace: false,
-      primaryFace: null,
-      faces: [],
-    };
-  }
-
-  const threshold = request.threshold ?? 0.35;
-  const faces = extractFaceCandidates(
-    firstOutput,
-    threshold,
-    request.width,
-    request.height,
-  );
-  // Debug: Log all detected face boxes and their confidence scores
-  console.log(
-    "[FaceDetection] Detected faces:",
-    faces.map((f) => ({
-      x: f.x,
-      y: f.y,
-      w: f.width,
-      h: f.height,
-      confidence: f.confidence,
-    })),
-  );
-
-  const primaryFace = faces[0] ?? null;
-  const confidence = primaryFace?.confidence ?? 0;
-  const hasSingleForegroundFace =
-    primaryFace !== null && faces.length === 1 && isForegroundFace(primaryFace);
-
-  let reasonCode: FaceReasonCode = "ok";
-  let message = "Face detected";
-
-  if (faces.length === 0) {
-    reasonCode = "no-face";
-    message = "No face detected";
-  } else if (faces.length > 1) {
-    reasonCode = "multiple-faces";
-    message = "Multiple faces detected";
-  } else if (!hasSingleForegroundFace) {
-    reasonCode = "not-foreground";
-    message = "Face not in foreground";
-  }
-
-  return {
-    detected: hasSingleForegroundFace,
-    confidence,
-    modelReady: true,
-    message,
-    faceCount: faces.length,
-    reasonCode,
-    hasSingleForegroundFace,
-    primaryFace,
-    faces,
-  };
-};
-import { app, BrowserWindow, ipcMain } from "electron";
-import fs from "node:fs";
-import path from "node:path";
-import started from "electron-squirrel-startup";
+import { app, BrowserWindow, ipcMain } from 'electron';
+import fs from 'node:fs';
+import path from 'node:path';
+import started from 'electron-squirrel-startup';
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -129,11 +9,11 @@ if (started) {
 }
 
 app.disableHardwareAcceleration();
-app.commandLine.appendSwitch("disable-gpu");
-app.commandLine.appendSwitch("disable-gpu-sandbox");
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-gpu-sandbox');
 
 if (!app.isPackaged) {
-  app.commandLine.appendSwitch("no-sandbox");
+  app.commandLine.appendSwitch('no-sandbox');
 }
 
 const createWindow = () => {
@@ -145,7 +25,7 @@ const createWindow = () => {
     minHeight: 740,
     autoHideMenuBar: true,
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -158,12 +38,10 @@ const createWindow = () => {
     );
   }
 
-  mainWindow.webContents.session.setPermissionRequestHandler(
-    (_, permission, callback) => {
-      const allowedPermissions = new Set(["media"]);
-      callback(allowedPermissions.has(permission));
-    },
-  );
+  mainWindow.webContents.session.setPermissionRequestHandler((_, permission, callback) => {
+    const allowedPermissions = new Set(['media']);
+    callback(allowedPermissions.has(permission));
+  });
 
   mainWindow.maximize();
 };
@@ -176,12 +54,12 @@ type FaceDetectionRequest = {
 };
 
 type FaceReasonCode =
-  | "ok"
-  | "no-face"
-  | "multiple-faces"
-  | "face-out-of-zone"
-  | "model-error"
-  | "invalid-input";
+  | 'ok'
+  | 'no-face'
+  | 'multiple-faces'
+  | 'face-out-of-zone'
+  | 'model-error'
+  | 'invalid-input';
 
 type FaceBox = {
   x: number;
@@ -217,10 +95,7 @@ type OnnxSession = {
 type OnnxModule = {
   Tensor: new (type: string, data: Float32Array, dims: number[]) => unknown;
   InferenceSession: {
-    create: (
-      modelPath: string,
-      options?: Record<string, unknown>,
-    ) => Promise<OnnxSession>;
+    create: (modelPath: string, options?: Record<string, unknown>) => Promise<OnnxSession>;
   };
 };
 
@@ -232,7 +107,7 @@ const loadOnnxModule = async (): Promise<OnnxModule> => {
     return onnxModulePromise;
   }
 
-  const moduleName = "onnxruntime-node";
+  const moduleName = 'onnxruntime-node';
   onnxModulePromise = import(moduleName) as Promise<OnnxModule>;
   return onnxModulePromise;
 };
@@ -243,10 +118,10 @@ const resolveModelPath = (): string => {
   }
 
   if (app.isPackaged) {
-    return path.join(process.resourcesPath, "YOLOv26", "yolo26s.onnx");
+    return path.join(process.resourcesPath, 'YOLOv26', 'yolo26s.onnx');
   }
 
-  return path.join(app.getAppPath(), "YOLOv26", "yolo26s.onnx");
+  return path.join(app.getAppPath(), 'YOLOv26', 'yolo26s.onnx');
 };
 
 const ensureFaceSession = async (): Promise<OnnxSession> => {
@@ -263,8 +138,8 @@ const ensureFaceSession = async (): Promise<OnnxSession> => {
     }
 
     return onnx.InferenceSession.create(modelPath, {
-      executionProviders: ["cpu"],
-      graphOptimizationLevel: "all",
+      executionProviders: ['cpu'],
+      graphOptimizationLevel: 'all',
     });
   })();
 
@@ -356,16 +231,12 @@ const getIntersectionOverUnion = (a: FaceBox, b: FaceBox): number => {
   return intersectArea / union;
 };
 
-const applyNms = (boxes: FaceBox[], iouThreshold = 0.2): FaceBox[] => {
-  const sorted = [...boxes].sort(
-    (left, right) => right.confidence - left.confidence,
-  );
+const applyNms = (boxes: FaceBox[], iouThreshold = 0.45): FaceBox[] => {
+  const sorted = [...boxes].sort((left, right) => right.confidence - left.confidence);
   const selected: FaceBox[] = [];
 
   for (const candidate of sorted) {
-    const overlaps = selected.some(
-      (chosen) => getIntersectionOverUnion(candidate, chosen) > iouThreshold,
-    );
+    const overlaps = selected.some((chosen) => getIntersectionOverUnion(candidate, chosen) > iouThreshold);
 
     if (!overlaps) {
       selected.push(candidate);
@@ -423,12 +294,7 @@ const normalizeCandidateBox = (x: number, y: number, width: number, height: numb
   return areaB < areaA ? b : a;
 };
 
-const extractFaceCandidates = (
-  output: OnnxTensor,
-  threshold: number,
-  inputWidth: number,
-  inputHeight: number,
-): FaceBox[] => {
+const extractFaceCandidates = (output: OnnxTensor, threshold: number, inputWidth: number, inputHeight: number): FaceBox[] => {
   const dims = output.dims;
   const data = output.data;
 
@@ -451,14 +317,7 @@ const extractFaceCandidates = (
       const score = normalizeScore(getCandidateScore(attributes));
 
       if (score >= threshold) {
-        const box = normalizeCandidateBox(
-          x,
-          y,
-          width,
-          height,
-          inputWidth,
-          inputHeight,
-        );
+        const box = normalizeCandidateBox(x, y, width, height, inputWidth, inputHeight);
         box.confidence = score;
         candidates.push(box);
       }
@@ -621,31 +480,39 @@ const runFaceDetection = async (request: FaceDetectionRequest): Promise<FaceDete
   const firstOutputName = session.outputNames[0];
   const firstOutput = firstOutputName ? outputs[firstOutputName] : undefined;
 
-  const nmsBoxes = applyNms(filtered).sort(
-    (a, b) => b.confidence - a.confidence,
-  );
-  return nmsBoxes.length > 0 ? [nmsBoxes[0]] : [];
+  if (!firstOutput) {
+    return {
+      detected: false,
+      confidence: 0,
+      modelReady: false,
+      message: 'Model output is unavailable.',
+      faceCount: 0,
+      reasonCode: 'model-error',
+      hasSingleForegroundFace: false,
+      primaryFace: null,
+      faces: [],
+    };
+  }
 
   const threshold = request.threshold ?? 0.35;
   const detectedFaces = extractFaceCandidates(firstOutput, threshold, request.width, request.height);
   const faces = selectFaceCandidates(detectedFaces).slice(0, 5);
   const primaryFace = faces[0] ?? null;
   const confidence = primaryFace?.confidence ?? 0;
-  const hasSingleForegroundFace =
-    primaryFace !== null && faces.length === 1 && isForegroundFace(primaryFace);
+  const hasSingleForegroundFace = primaryFace !== null && faces.length === 1 && isForegroundFace(primaryFace);
 
-  let reasonCode: FaceReasonCode = "ok";
-  let message = "Face detected";
+  let reasonCode: FaceReasonCode = 'ok';
+  let message = 'Face detected';
 
   if (faces.length === 0) {
-    reasonCode = "no-face";
-    message = "No face detected";
+    reasonCode = 'no-face';
+    message = 'No face detected';
   } else if (faces.length > 1) {
-    reasonCode = "multiple-faces";
-    message = "Multiple faces detected";
+    reasonCode = 'multiple-faces';
+    message = 'Multiple faces detected';
   } else if (!hasSingleForegroundFace) {
-    reasonCode = "face-out-of-zone";
-    message = "Move closer and center your face in frame";
+    reasonCode = 'face-out-of-zone';
+    message = 'Move closer and center your face in frame';
   }
 
   return {
@@ -690,18 +557,18 @@ ipcMain.handle('detector:face', async (_event, request: FaceDetectionRequest): P
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.
 // Some APIs can only be used after this event occurs.
-app.on("ready", createWindow);
+app.on('ready', createWindow);
 
 // Quit when all windows are closed, except on macOS. There, it's common
 // for applications and their menu bar to stay active until the user quits
 // explicitly with Cmd + Q.
-app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
+app.on('window-all-closed', () => {
+  if (process.platform !== 'darwin') {
     app.quit();
   }
 });
 
-app.on("activate", () => {
+app.on('activate', () => {
   // On OS X it's common to re-create a window in the app when the
   // dock icon is clicked and there are no other windows open.
   if (BrowserWindow.getAllWindows().length === 0) {
