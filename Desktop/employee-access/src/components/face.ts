@@ -1,12 +1,21 @@
 type StatusTone = 'ok' | 'warn' | 'error';
 
+type OverlayFaceBox = {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    confidence: number;
+};
+
 export type CameraPane = {
     element: HTMLElement;
     start: () => Promise<void>;
     stop: () => void;
     setStatus: (label: string, tone?: StatusTone) => void;
     captureFrameTensor: (targetSize?: number) => Float32Array | null;
-    captureFrameBlob: () => Promise<Blob | null>;
+    captureFrameJpeg: (targetSize?: number, quality?: number) => string | null;
+    setFaceOverlay: (face: OverlayFaceBox | null) => void;
 };
 
 const createStatusChip = (): HTMLSpanElement => {
@@ -33,7 +42,18 @@ export const createFacePane = (): CameraPane => {
     placeholder.className = 'camera-placeholder';
     placeholder.textContent = 'Live camera preview';
 
-    frame.append(statusChip, video, placeholder);
+    const faceGuide = document.createElement('div');
+    faceGuide.className = 'face-guide';
+
+    const faceOverlay = document.createElement('div');
+    faceOverlay.className = 'face-overlay';
+
+    const confidenceLabel = document.createElement('span');
+    confidenceLabel.className = 'face-overlay-label';
+
+    faceOverlay.append(confidenceLabel);
+
+    frame.append(statusChip, video, placeholder, faceGuide, faceOverlay);
 
     let stream: MediaStream | null = null;
     const canvas = document.createElement('canvas');
@@ -83,6 +103,7 @@ export const createFacePane = (): CameraPane => {
         video.srcObject = null;
         placeholder.style.display = 'flex';
         setStatus('Camera stopped', 'warn');
+        setFaceOverlay(null);
     };
 
     const captureFrameTensor = (targetSize = 640): Float32Array | null => {
@@ -113,18 +134,34 @@ export const createFacePane = (): CameraPane => {
         return tensor;
     };
 
-    const captureFrameBlob = (): Promise<Blob | null> =>
-        new Promise((resolve) => {
-            if (!context || !video.videoWidth || !video.videoHeight) {
-                resolve(null);
-                return;
-            }
-            const size = 640;
-            canvas.width = size;
-            canvas.height = size;
-            context.drawImage(video, 0, 0, size, size);
-            canvas.toBlob((blob) => resolve(blob ?? null), 'image/jpeg', 0.9);
-        });
+    const captureFrameJpeg = (targetSize = 640, quality = 0.88): string | null => {
+        if (!context) {
+            return null;
+        }
+
+        if (!video.videoWidth || !video.videoHeight) {
+            return null;
+        }
+
+        canvas.width = targetSize;
+        canvas.height = targetSize;
+        context.drawImage(video, 0, 0, targetSize, targetSize);
+        return canvas.toDataURL('image/jpeg', quality);
+    };
+
+    const setFaceOverlay = (face: OverlayFaceBox | null): void => {
+        if (!face) {
+            faceOverlay.style.display = 'none';
+            return;
+        }
+
+        faceOverlay.style.display = 'block';
+        faceOverlay.style.left = `${face.x * 100}%`;
+        faceOverlay.style.top = `${face.y * 100}%`;
+        faceOverlay.style.width = `${face.width * 100}%`;
+        faceOverlay.style.height = `${face.height * 100}%`;
+        confidenceLabel.textContent = `${(face.confidence * 100).toFixed(1)}%`;
+    };
 
     return {
         element: frame,
@@ -132,6 +169,7 @@ export const createFacePane = (): CameraPane => {
         stop,
         setStatus,
         captureFrameTensor,
-        captureFrameBlob,
+        captureFrameJpeg,
+        setFaceOverlay,
     };
 };

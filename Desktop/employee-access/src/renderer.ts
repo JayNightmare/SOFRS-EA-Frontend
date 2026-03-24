@@ -26,12 +26,7 @@
  * ```
  */
 
-import { createEmployeePage } from './pages/employee';
-import { createErrorPage } from './pages/error';
-import { createHomePage } from './pages/home';
-import { createVisitorPage } from './pages/visitor';
-
-type Route = 'home' | 'employee' | 'visitor' | 'error';
+import { createMainScreenPage } from './pages/main-screen';
 
 type View = {
   element: HTMLElement;
@@ -47,46 +42,13 @@ if (!app) {
 
 let activeView: View | null = null;
 
-const navigate = async (route: Route): Promise<void> => {
+const renderApp = async (): Promise<void> => {
   if (activeView?.onHide) {
     activeView.onHide();
   }
 
   app.replaceChildren();
-
-  let nextView: View;
-
-  if (route === 'home') {
-    nextView = createHomePage({
-      onSelectEmployee: () => {
-        void navigate('employee');
-      },
-      onSelectVisitor: () => {
-        void navigate('visitor');
-      },
-    });
-  } else if (route === 'employee') {
-    nextView = createEmployeePage({
-      onBack: () => {
-        void navigate('home');
-      },
-      onGoVisitor: () => {
-        void navigate('visitor');
-      },
-    });
-  } else if (route === 'visitor') {
-    nextView = createVisitorPage({
-      onBack: () => {
-        void navigate('home');
-      },
-    });
-  } else {
-    nextView = {
-      element: createErrorPage(() => {
-        void navigate('home');
-      }),
-    };
-  }
+  const nextView = createMainScreenPage();
 
   activeView = nextView;
   app.append(nextView.element);
@@ -96,4 +58,4 @@ const navigate = async (route: Route): Promise<void> => {
   }
 };
 
-void navigate('home');
+void renderApp();
