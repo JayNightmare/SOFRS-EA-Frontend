@@ -380,6 +380,14 @@ export const createMainScreenPage = (): MainScreenView => {
     ): void => {
         employeeDetails.replaceChildren();
 
+        if (employee?.ownerType) {
+            employeeDetails.append(
+                createDetailRow(
+                    'Type',
+                    employee.ownerType.charAt(0).toUpperCase() + employee.ownerType.slice(1),
+                ),
+            );
+        }
         if (employee?.department) {
             employeeDetails.append(createDetailRow('Department', employee.department));
         }
@@ -412,8 +420,12 @@ export const createMainScreenPage = (): MainScreenView => {
         resultCard.dataset.outcome = 'success';
 
         const name = response.employee?.name ?? 'Unknown';
+        const role =
+            response.employee?.ownerType
+                ? response.employee.ownerType.charAt(0).toUpperCase() + response.employee.ownerType.slice(1)
+                : response.employee?.department ?? 'Employee';
         resultFaceName.textContent = name;
-        resultFaceRole.textContent = response.employee?.department ?? 'Employee';
+        resultFaceRole.textContent = role;
         resultTitle.textContent = response.message;
         resultCopy.textContent = `Welcome back, ${name}.`;
         resultTimestamp.textContent = formatTimestamp();
@@ -526,7 +538,7 @@ export const createMainScreenPage = (): MainScreenView => {
 
                 try {
                     const imageFile = await dataUrlToJpegFile(dataUrl);
-                    const response = await verifyFace(imageFile, 'verification');
+                    const response = await verifyFace(imageFile, 'temp_images');
 
                     if (response.recognized) {
                         await showRecognized(response, dataUrl, null);
@@ -602,7 +614,7 @@ export const createMainScreenPage = (): MainScreenView => {
 
             const imageFile = await dataUrlToJpegFile(snapshot);
 
-            const response = await verifyFace(imageFile, "verification", requestAbort.signal);
+            const response = await verifyFace(imageFile, "temp_images", requestAbort.signal);
 
             setStage('verifying', 'Verifying response', 'Evaluating recognition response and policy checks.');
             setProgressTarget(85);

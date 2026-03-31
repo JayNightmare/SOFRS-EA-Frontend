@@ -13,9 +13,14 @@ import { CameraView, useCameraPermissions } from 'expo-camera';
 import Svg, { Ellipse, Line, Path } from 'react-native-svg';
 
 import { useUser } from '@/contexts/user-context';
-import { uploadImages, ApiError } from '@/lib/api';
+import { uploadImages, ApiError, type UploadImageFile } from '@/lib/api';
 import { AppColors, AppSpacing, AppBorderRadius, AppFontSizes } from '@/constants/theme';
-import { FACE_POSITIONS, POSITION_INSTRUCTIONS, type FaceCapturePosition } from '@/constants/types';
+import {
+  FACE_POSITIONS,
+  POSITION_INSTRUCTIONS,
+  type FaceCaptureAsset,
+  type FaceCapturePosition,
+} from '@/constants/types';
 
 const { width: SCREEN_WIDTH } = Dimensions.get('window');
 const OVAL_WIDTH = SCREEN_WIDTH * 0.65;
@@ -51,11 +56,30 @@ function StatusChip({ label, positive }: StatusChipData) {
   );
 }
 
-function base64ToBlob(base64: string): Blob {
-  const binary = atob(base64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
-  return new Blob([bytes], { type: 'image/jpeg' });
+function isUploadableCapture(
+  capture: FaceCaptureAsset | undefined
+): capture is FaceCaptureAsset & { uri: string } {
+  return Boolean(capture?.uri && !capture.simulated);
+}
+
+function toUploadFiles(
+  captures: Record<string, FaceCaptureAsset | undefined>
+): UploadImageFile[] {
+  const files: UploadImageFile[] = [];
+
+  for (const [position, capture] of Object.entries(captures)) {
+    if (!isUploadableCapture(capture)) {
+      continue;
+    }
+
+    files.push({
+      uri: capture.uri,
+      name: `face_${files.length}_${position}.jpg`,
+      type: 'image/jpeg',
+    });
+  }
+
+  return files;
 }
 
 export default function FaceScanScreen() {
@@ -68,18 +92,23 @@ export default function FaceScanScreen() {
 
   const handleRetryUpload = useCallback(async () => {
     if (!recordId || isUploading) return;
-    const valid = Object.entries(faceScanResult).filter(
-      ([, v]) => v && !v.startsWith('simulated_')
-    );
-    if (valid.length === 0) return;
+    const files = toUploadFiles(faceScanResult);
+    if (files.length === 0) return;
     setUploadError(null);
     setIsUploading(true);
     try {
-      const blobs = valid.map(([, b64]) => base64ToBlob(b64));
-      await uploadImages(recordId, blobs);
+      await uploadImages(recordId, files);
       router.replace('/setup-success');
     } catch (err) {
-      setUploadError(err instanceof ApiError ? err.message : 'Upload failed');
+      setUploadError(
+        err instanceof ApiError
+          ? err.detail
+            ? `${err.message}: ${err.detail}`
+            : err.message
+          : err instanceof Error
+            ? err.message
+            : 'Upload failed'
+      );
     } finally {
       setIsUploading(false);
     }
@@ -88,7 +117,7 @@ export default function FaceScanScreen() {
   const [permission, requestPermission] = useCameraPermissions();
   const [currentIndex, setCurrentIndex] = useState(0);
   const [captureStatus, setCaptureStatus] = useState<CaptureStatus>('waiting');
-  const [captures, setCaptures] = useState<Record<string, string>>({});
+  const [captures, setCaptures] = useState<Record<string, FaceCaptureAsset>>({});
   const [faceDetected, setFaceDetected] = useState(true);
   const [goodLighting, setGoodLighting] = useState(true);
   const [holdStill, setHoldStill] = useState(false);
@@ -108,8 +137,14 @@ export default function FaceScanScreen() {
         base64: true,
       });
 
-      if (photo?.base64) {
-        const newCaptures = { ...captures, [currentPosition]: photo.base64 };
+      if (photo?.uri) {
+        const newCaptures = {
+          ...captures,
+          [currentPosition]: {
+            uri: photo.uri,
+            base64: photo.base64 ?? undefined,
+          },
+        };
         setCaptures(newCaptures);
 
         setHoldStill(false);
@@ -125,17 +160,21 @@ export default function FaceScanScreen() {
           // All captures complete — upload to backend if we have recordId and real images
           setFaceScanResult(newCaptures);
           setUploadError(null);
-          const validCaptures = Object.entries(newCaptures).filter(
-            ([, v]) => v && !v.startsWith('simulated_')
-          );
-          if (recordId && validCaptures.length > 0) {
+          const files = toUploadFiles(newCaptures);
+          if (recordId && files.length > 0) {
             setIsUploading(true);
             try {
-              const blobs = validCaptures.map(([, b64]) => base64ToBlob(b64));
-              await uploadImages(recordId, blobs);
+              await uploadImages(recordId, files);
               setTimeout(() => router.replace('/setup-success'), 1000);
             } catch (err) {
-              const msg = err instanceof ApiError ? err.message : 'Upload failed';
+              const msg =
+                err instanceof ApiError
+                  ? err.detail
+                    ? `${err.message}: ${err.detail}`
+                    : err.message
+                  : err instanceof Error
+                    ? err.message
+                    : 'Upload failed';
               setUploadError(msg);
               setHoldStill(false);
             } finally {
@@ -159,7 +198,10 @@ export default function FaceScanScreen() {
     setCaptureStatus('capturing');
     setHoldStill(true);
 
-    const newCaptures = { ...captures, [currentPosition]: `simulated_${currentPosition}_${Date.now()}` };
+    const newCaptures = {
+      ...captures,
+      [currentPosition]: { simulated: true },
+    };
     setCaptures(newCaptures);
 
     setTimeout(() => {

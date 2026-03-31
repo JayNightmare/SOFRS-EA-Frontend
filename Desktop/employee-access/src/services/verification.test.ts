@@ -19,6 +19,7 @@ describe('verifyFace', () => {
     const apiPayload = {
       message: 'Welcome back, Alice.',
       employee: { _id: 'emp-001', fullName: 'Alice Smith', department: 'Engineering' },
+      matched_identity: { owner_type: 'employee' },
       similarity: 0.92,
     };
 
@@ -33,8 +34,30 @@ describe('verifyFace', () => {
     expect(result.recognized).toBe(true);
     expect(result.employee).not.toBeNull();
     expect(result.employee?.name).toBe('Alice Smith');
+    expect(result.employee?.ownerType).toBe('employee');
     expect(result.similarity).toBeCloseTo(0.92);
     expect(result.reasonCode).toBe('ok');
+  });
+
+  it('maps visitor owner_type from matched_identity', async () => {
+    const apiPayload = {
+      message: 'Welcome back, Jamie.',
+      visitor: { _id: 'vis-001', fullName: 'Jamie Visitor' },
+      matched_identity: { owner_type: 'visitor' },
+      similarity: 0.88,
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => apiPayload,
+    });
+
+    const file = new File(['fake-jpeg'], 'face.jpg', { type: 'image/jpeg' });
+    const result = await verifyFace(file);
+
+    expect(result.recognized).toBe(true);
+    expect(result.employee?.name).toBe('Jamie Visitor');
+    expect(result.employee?.ownerType).toBe('visitor');
   });
 
   it('maps an unrecognized response correctly', async () => {

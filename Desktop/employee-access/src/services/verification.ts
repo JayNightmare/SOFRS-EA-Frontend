@@ -11,6 +11,7 @@ export type EmployeeRecord = {
     name?: string;
     department?: string;
     title?: string;
+    ownerType?: string;
     [key: string]: unknown;
 };
 
@@ -64,7 +65,10 @@ const toNumber = (value: unknown): number => {
     return value;
 };
 
-const normalizePersonRecord = (value: unknown): EmployeeRecord | null => {
+const normalizePersonRecord = (
+    value: unknown,
+    ownerType?: string,
+): EmployeeRecord | null => {
     if (!value || typeof value !== "object") {
         return null;
     }
@@ -85,6 +89,7 @@ const normalizePersonRecord = (value: unknown): EmployeeRecord | null => {
                 : typeof source.fullName === "string"
                     ? source.fullName
                     : undefined,
+        ownerType,
     };
 };
 
@@ -127,11 +132,26 @@ const mapResponse = (payload: unknown): VerifyFaceResponse => {
     }
 
     const source = payload as Record<string, unknown>;
+    const matchedIdentity =
+        source.matched_identity && typeof source.matched_identity === "object"
+            ? source.matched_identity as Record<string, unknown>
+            : null;
+    const ownerType =
+        matchedIdentity && typeof matchedIdentity.owner_type === "string"
+            ? matchedIdentity.owner_type
+            : source.employee
+                ? "employee"
+                : source.visitor
+                    ? "visitor"
+                    : undefined;
     const message =
         typeof source.message === "string"
             ? source.message
             : "Verification service returned an invalid response.";
-    const employee = normalizePersonRecord(source.employee ?? source.visitor);
+    const employee = normalizePersonRecord(
+        source.employee ?? source.visitor,
+        ownerType,
+    );
     const rawSimilarity = toNumber(source.similarity);
     const explicitRecognized = source.recognized;
     const inferredRecognized =
