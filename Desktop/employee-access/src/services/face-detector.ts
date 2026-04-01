@@ -44,6 +44,7 @@ const normaliseBounds = (
 	width: bounds.width / sourceWidth,
 	height: bounds.height / sourceHeight,
 	confidence: 1, // Shape Detection API doesn't expose confidence
+
 });
 
 const isForeground = (face: DetectedFace): boolean => {
