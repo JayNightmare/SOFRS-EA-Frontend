@@ -12,6 +12,7 @@
 
 ## Active Tasks
 ### Completed
+- Wrote API endpoints documentation and updated backend README to include team structures and API references.
 - Initial folder structure setup.
 - Basic implementation of Mobile app (6 screens, context, camera scan).
 - Fixed YOLO face detection: removed dual-decoder heuristic, raised area thresholds.
@@ -20,6 +21,11 @@
 - Mobile camera relay: WebSocket server in Electron for no-webcam fallback, mobile relay-capture screen.
 - Vitest test infrastructure for Desktop app (10 passing tests).
 - Backend error handling: security fix (API key leak), CRUD/router/utility error guards, input validation, global exception handler, 20 passing tests.
+- Desktop UI Pivot: Implemented locked Kiosk idle & scanning screens, alongside a hidden 5-tap gesture-secured Admin Dashboard with CRUD interfaces for Employee and Visitor management matching design specifications.
+- Kiosk UI Overhaul: Rebuilt all kiosk views from Figma mockups — overlapping button layout on idle, circular bio-frame camera viewport with animated scan-line, and full Approved/Denied feedback state screens with auto-return logic.
+- Kiosk DRY Refactor: Extracted duplicated sidebar, topbar, and layout shell into shared `kiosk-layout.ts` component. Swapped emojis (🚪 Check In, 🏠 Check Out). Scan, Approved, and Denied screens now delegate layout to the shared shell.
+- Kiosk Icon & Data Overhaul: Replaced all emojis/Unicode symbols with SVG icons via centralised `icons.ts` registry. Added `weather.ts` service (Open-Meteo API, no key). Idle footer shows live weather and reads version from `package.json`. Denied screen accepts `VerifyFaceResponse` and displays the real error message/reason code.
+- Face Detection Migration: Replaced ONNX YOLOv26s (main process IPC) with Chromium native `FaceDetector` API (renderer-side, GPU-accelerated). Removed ~500 lines from `main.ts`, deleted `YOLOv26/` model directory (~58MB), dropped `onnxruntime-node`/`ultralytics`/`webpack-node-externals` deps. New service at `services/face-detector.ts`. All 3 consumers (scan, employee, main-screen) migrated. `captureFrameTensor` removed from `face.ts`.
 
 ### Next Steps
 - Continue development as outlined in sub-project documentation.

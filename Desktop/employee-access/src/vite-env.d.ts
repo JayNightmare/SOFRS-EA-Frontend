@@ -16,45 +16,22 @@ interface ImportMeta {
 	readonly env: ImportMetaEnv;
 }
 
-type FaceDetectionRequest = {
-	tensor: number[];
-	width: number;
-	height: number;
-	threshold?: number;
-};
+/**
+ * Chromium Shape Detection API — FaceDetector.
+ * Available when `--enable-experimental-web-platform-features` is set.
+ */
+interface DetectedFaceNative {
+	boundingBox: DOMRectReadOnly;
+	landmarks?: ReadonlyArray<{ type: string; locations: ReadonlyArray<{ x: number; y: number }> }>;
+}
 
-type FaceReasonCode =
-	| 'ok'
-	| 'no-face'
-	| 'multiple-faces'
-	| 'face-out-of-zone'
-	| 'model-error'
-	| 'invalid-input';
-
-type FaceBox = {
-	x: number;
-	y: number;
-	width: number;
-	height: number;
-	confidence: number;
-};
-
-type FaceDetectionResponse = {
-	detected: boolean;
-	confidence: number;
-	modelReady: boolean;
-	message: string;
-	faceCount: number;
-	reasonCode: FaceReasonCode;
-	hasSingleForegroundFace: boolean;
-	primaryFace: FaceBox | null;
-	faces: FaceBox[];
-};
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+declare class FaceDetector {
+	constructor(options?: { maxDetectedFaces?: number; fastMode?: boolean });
+	detect(image: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement | ImageBitmap): Promise<DetectedFaceNative[]>;
+}
 
 interface Window {
-	detector: {
-		detectFace: (request: FaceDetectionRequest) => Promise<FaceDetectionResponse>;
-	};
 	relay: {
 		getPort: () => Promise<number>;
 		getLocalIp: () => Promise<string>;
@@ -62,4 +39,3 @@ interface Window {
 		removePhotoListener: () => void;
 	};
 }
-

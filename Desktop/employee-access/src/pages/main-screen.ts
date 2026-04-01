@@ -1,5 +1,6 @@
 import { createFacePane } from '../components/face';
 import { verifyFace } from '../services/verification';
+import { detectFaces, FaceDetectionResult } from '../services/face-detector';
 import type { VerifyFaceResponse, EmployeeRecord } from '../services/verification';
 
 type MainScreenView = {
@@ -589,7 +590,7 @@ export const createMainScreenPage = (): MainScreenView => {
         return new File([blob], 'face.jpg', { type: 'image/jpeg' });
     };
 
-    const runVerification = async (detection: FaceDetectionResponse): Promise<void> => {
+    const runVerification = async (detection: FaceDetectionResult): Promise<void> => {
         if (!detection.primaryFace || verifying || loopPaused) {
             return;
         }
@@ -605,8 +606,6 @@ export const createMainScreenPage = (): MainScreenView => {
         setProgressTarget(34);
 
         requestAbort = new AbortController();
-
-        console.log('Captured face image, starting verification process.');
 
         try {
             setStage('uploading', 'Sending to API', 'Uploading captured face to verification service.');
@@ -638,52 +637,35 @@ export const createMainScreenPage = (): MainScreenView => {
             return;
         }
 
-        const tensor = camera.captureFrameTensor(640);
-        if (!tensor) {
-            setProgressTarget(6);
-            return;
-        }
-
-        console.log('Captured frame tensor, sending to face detection module.');
         try {
-            const response = await window.detector.detectFace({
-                tensor: Array.from(tensor),
-                width: 640,
-                height: 640,
-                threshold: 0.35,
-            });
+            const response = await detectFaces(camera.getVideoElement());
 
             camera.setFaceOverlay(response.primaryFace);
 
-            if (!response.modelReady) {
-                console.log('Face detection model is still loading.');
+            if (response.reasonCode === 'not-supported') {
                 showError(response.message);
                 return;
             }
 
             if (response.reasonCode === 'multiple-faces') {
-                console.log('Multiple faces detected in the frame.');
                 setStage('detecting', 'Single face required', 'Only one foreground face can be in front of the camera.');
                 setProgressTarget(10);
                 return;
             }
 
             if (response.reasonCode === 'face-out-of-zone') {
-                console.log('Face detected but not properly aligned.');
                 setStage('detecting', 'Move closer', 'Center your face inside the guide and stay still.');
                 setProgressTarget(14);
                 return;
             }
 
             if (!response.detected) {
-                console.log('No face detected in the current frame.');
                 setStage('detecting', 'Face not found', 'Align your face to start verification.');
                 setProgressTarget(8);
                 return;
             }
 
             if (response.hasSingleForegroundFace) {
-                console.log('Stable face detected, proceeding to verification.');
                 setStage('detecting', 'Face locked', 'Stable face found. Starting verification sequence.');
                 setProgressTarget(22);
                 await runVerification(response);
