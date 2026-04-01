@@ -1,49 +1,18 @@
 import { View, navigate } from '../../renderer';
 import { createFacePane } from '../../components/face';
+import { createKioskLayoutShell } from '../../components/kiosk-layout';
+import { svgIconHtml } from '../../components/icons';
 import { verifyFace, VerifyFaceResponse } from '../../services/verification';
+import { detectFaces } from '../../services/face-detector';
 import { createKioskIdleScreen } from './idle';
 import { createKioskApprovedScreen } from './approved';
 import { createKioskDeniedScreen } from './denied';
 
 export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
-  const container = document.createElement('div');
-  container.className = 'kiosk-scan-layout';
-
-  // --- Sidebar ---
-  const sidebar = document.createElement('aside');
-  sidebar.className = 'kiosk-sidebar';
-
-  const addSidebarItem = (label: string, icon: string, isActive = false) => {
-    const item = document.createElement('button');
-    item.className = `sidebar-item ${isActive ? 'active' : ''}`;
-    item.innerHTML = `<span class="icon">${icon}</span><span class="label">${label}</span>`;
-    return item;
-  };
-
-  const navHome = addSidebarItem('Check In', '🏠', mode === 'check-in');
-  navHome.addEventListener('click', () => navigate(createKioskIdleScreen));
-  const navCheckOut = addSidebarItem('Check Out', '🚪', mode === 'check-out');
-  const navVisitor = addSidebarItem('Visitor', '👥');
-  const navHelp = addSidebarItem('Help', 'ⓘ');
-
-  sidebar.append(navHome, navCheckOut, navVisitor, document.createElement('div'), navHelp);
-
-  // --- Main Content Area ---
-  const main = document.createElement('main');
-  main.className = 'kiosk-scan-main';
-
-  // Top header inside main
-  const topBar = document.createElement('header');
-  topBar.className = 'scan-topbar';
-  topBar.innerHTML = `
-    <h1 class="company-logo">EmployeeAccess</h1>
-    <div class="status-group">
-      <div class="system-status"><span class="status-dot"></span> SYSTEM ONLINE</div>
-      <button class="icon-btn">?</button>
-      <button class="icon-btn">⚙</button>
-      <div class="avatar-placeholder"></div>
-    </div>
-  `;
+  const { container, main } = createKioskLayoutShell(mode, {
+    showSystemStatus: true,
+    bindHomeNav: true,
+  });
 
   // Content body
   const body = document.createElement('div');
@@ -60,68 +29,60 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   liveCorners.className = 'bio-frame-corners';
   const liveScanLine = document.createElement('div');
   liveScanLine.className = 'scan-line';
-  
-  const livePanel = document.createElement('div');
-  livePanel.className = 'video-panel live';
-  const liveLabel = document.createElement('div');
-  liveLabel.className = 'panel-label';
-  liveLabel.innerHTML = '<span>LIVE</span><span>SAFE WORK</span>';
-  
+
   const faceCamera = createFacePane();
-  livePanel.append(faceCamera.element, liveLabel);
-  liveFrame.append(liveCorners, liveScanLine, livePanel);
+  liveFrame.append(faceCamera.element, liveCorners, liveScanLine);
 
-  // Match Panel inside bio-frame
-  const matchFrame = document.createElement('div');
-  matchFrame.className = 'bio-frame';
-  const matchCorners = document.createElement('div');
-  matchCorners.className = 'bio-frame-corners';
+  const liveLabel = document.createElement('span');
+  liveLabel.className = 'panel-label';
+  liveLabel.textContent = 'LIVE';
 
+  const livePanel = document.createElement('div');
+  livePanel.className = 'video-panel';
+  livePanel.append(liveFrame, liveLabel);
+
+  // Match Panel
   const matchPanel = document.createElement('div');
   matchPanel.className = 'video-panel match';
   const matchImg = document.createElement('img');
-  matchImg.className = 'match-img';
+  matchImg.className = 'match-thumb';
+  matchImg.alt = 'Matched face';
   matchImg.style.display = 'none';
-  const matchLabel = document.createElement('div');
+  const matchLabel = document.createElement('span');
   matchLabel.className = 'panel-label';
-  matchLabel.innerHTML = '<span>MATCH</span><span>VERIFIED</span>';
-  
+  matchLabel.textContent = 'MATCH';
   matchPanel.append(matchImg, matchLabel);
-  matchFrame.append(matchCorners, matchPanel);
 
-  panelsGroup.append(liveFrame, matchFrame);
+  panelsGroup.append(livePanel, matchPanel);
 
-  // Match Status
+  // Similarity Gauge
   const matchBox = document.createElement('div');
-  matchBox.className = 'match-status-box';
-  const matchTitle = document.createElement('p');
-  matchTitle.textContent = 'Match';
-  const matchPercent = document.createElement('h2');
+  matchBox.className = 'match-box';
+  const matchPercent = document.createElement('span');
+  matchPercent.className = 'match-percent';
   matchPercent.textContent = '--%';
-  matchBox.append(matchTitle, matchPercent);
+  const matchTag = document.createElement('span');
+  matchTag.className = 'match-tag';
+  matchTag.textContent = 'FACIAL MATCH SIMILARITY';
+  matchBox.append(matchPercent, matchTag);
 
-  // Action Buttons
+  // Actions
   const actionsBox = document.createElement('div');
   actionsBox.className = 'scan-actions';
-  
-  const btnConfirm = document.createElement('button');
-  btnConfirm.className = 'action-btn primary';
-  btnConfirm.textContent = '→ CONFIRM ENTRY';
-  btnConfirm.disabled = true;
 
   const btnRescan = document.createElement('button');
   btnRescan.className = 'action-btn secondary';
-  btnRescan.textContent = 'RE-SCAN';
+  btnRescan.textContent = 'RESCAN';
   btnRescan.addEventListener('click', () => {
-    matchPercent.textContent = '--%';
-    btnConfirm.disabled = true;
-    matchImg.style.display = 'none';
-    matchImg.src = '';
-    faceCamera.setFaceOverlay(null);
-    verifying = false;
+    navigate(() => createKioskScanScreen(mode));
   });
 
-  actionsBox.append(btnConfirm, btnRescan);
+  const btnConfirm = document.createElement('button');
+  btnConfirm.className = 'action-btn primary';
+  btnConfirm.textContent = 'CONFIRM IDENTITY';
+  btnConfirm.disabled = true;
+
+  actionsBox.append(btnRescan, btnConfirm);
 
   // Context Info (Footer)
   const contextBox = document.createElement('div');
@@ -129,28 +90,25 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
 
   const tokenInfo = document.createElement('div');
   tokenInfo.className = 'info-card';
-  tokenInfo.innerHTML = '<span class="icon">◎</span><div><small>TOKEN ID</small><p>AWAITING</p></div>';
+  tokenInfo.innerHTML = `<span class="icon">${svgIconHtml('fingerprint')}</span><div><small>TOKEN ID</small><p>AWAITING</p></div>`;
 
   const timeInfo = document.createElement('div');
   timeInfo.className = 'info-card';
-  timeInfo.innerHTML = '<span class="icon">⌚</span><div><small>TIMESTAMP</small><p>--:--:--</p></div>';
+  timeInfo.innerHTML = `<span class="icon">${svgIconHtml('clock')}</span><div><small>TIMESTAMP</small><p>--:--:--</p></div>`;
 
   const locInfo = document.createElement('div');
   locInfo.className = 'info-card';
-  locInfo.innerHTML = '<span class="icon">⚲</span><div><small>LOCATION</small><p>Main Lobby - East</p></div>';
+  locInfo.innerHTML = `<span class="icon">${svgIconHtml('location')}</span><div><small>LOCATION</small><p>Main Lobby - East</p></div>`;
 
   contextBox.append(tokenInfo, timeInfo, locInfo);
 
   body.append(panelsGroup, matchBox, actionsBox, contextBox);
-  main.append(topBar, body);
-  
-  container.append(sidebar, main);
+  main.append(body);
 
   // --- Recognition Logic ---
   let detectionTimer: ReturnType<typeof setInterval> | null = null;
   let verifying = false;
-
-  // Store last verification response for the confirm button
+  let detecting = false;
   let lastResponse: VerifyFaceResponse | null = null;
 
   btnConfirm.addEventListener('click', () => {
@@ -176,34 +134,26 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       matchImg.src = snapshot;
       matchImg.style.display = 'block';
       btnConfirm.disabled = false;
-      
+
       const emp = response.employee;
-      tokenInfo.innerHTML = `<span class="icon">◎</span><div><small>TOKEN ID</small><p>${emp?.id || 'VERIFIED'}</p></div>`;
-      timeInfo.innerHTML = `<span class="icon">⌚</span><div><small>TIMESTAMP</small><p>${new Date().toLocaleTimeString()}</p></div>`;
+      tokenInfo.innerHTML = `<span class="icon">${svgIconHtml('fingerprint')}</span><div><small>TOKEN ID</small><p>${emp?.id || 'VERIFIED'}</p></div>`;
+      timeInfo.innerHTML = `<span class="icon">${svgIconHtml('clock')}</span><div><small>TIMESTAMP</small><p>${new Date().toLocaleTimeString()}</p></div>`;
     } else {
-      // Navigate to the Denied screen after a short delay so the user sees FAIL
       matchPercent.textContent = 'FAIL';
       matchImg.style.display = 'none';
-      tokenInfo.innerHTML = `<span class="icon">◎</span><div><small>TOKEN ID</small><p>UNKNOWN</p></div>`;
+      tokenInfo.innerHTML = `<span class="icon">${svgIconHtml('fingerprint')}</span><div><small>TOKEN ID</small><p>UNKNOWN</p></div>`;
       setTimeout(() => {
-        navigate(() => createKioskDeniedScreen(mode));
+        navigate(() => createKioskDeniedScreen(response, mode));
       }, 1500);
     }
   };
 
   const runDetection = async () => {
-    if (verifying) return;
-
-    const tensor = faceCamera.captureFrameTensor(640);
-    if (!tensor) return;
+    if (verifying || detecting) return;
+    detecting = true;
 
     try {
-      const result = await window.detector.detectFace({
-        tensor: Array.from(tensor),
-        width: 640,
-        height: 640,
-        threshold: 0.35,
-      });
+      const result = await detectFaces(faceCamera.getVideoElement());
 
       faceCamera.setFaceOverlay(result.primaryFace);
 
@@ -214,16 +164,17 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
           verifying = false;
           return;
         }
-        
+
         const file = await dataUrlToJpegFile(snapshot);
         const response = await verifyFace(file, 'verification');
-        
-        // Populate the match component
+
         processMatch(response.similarity || 0, response, snapshot);
       }
     } catch (err) {
       console.error('Detection failed', err);
       verifying = false;
+    } finally {
+      detecting = false;
     }
   };
 

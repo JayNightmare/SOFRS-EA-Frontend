@@ -1,5 +1,6 @@
 import { searchImage, ApiError } from '../api';
 import { createFacePane } from '../components/face';
+import { detectFaces } from '../services/face-detector';
 
 export type EmployeePageView = {
     element: HTMLElement;
@@ -62,31 +63,10 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
             return;
         }
 
-        const frameTensor = camera.captureFrameTensor(1080);
-
-        if (!frameTensor) {
-            camera.setStatus('Camera warming up', 'warn');
-            result.dataset.tone = 'warn';
-            result.textContent = 'Preparing camera frame...';
-            return;
-        }
-
         isDetecting = true;
 
         try {
-            const response = await window.detector.detectFace({
-                tensor: Array.from(frameTensor),
-                width: 1080,
-                height: 1920,
-                threshold: 0.35,
-            });
-
-            if (!response.modelReady) {
-                camera.setStatus('Detector unavailable', 'error');
-                result.dataset.tone = 'error';
-                result.textContent = `Face detector unavailable: ${response.message}`;
-                return;
-            }
+            const response = await detectFaces(camera.getVideoElement());
 
             if (response.detected) {
                 camera.setStatus('Face detected', 'ok');
@@ -116,7 +96,7 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
 
             camera.setStatus('No face detected', 'warn');
             result.dataset.tone = 'warn';
-            result.textContent = `No face detected (${(response.confidence * 100).toFixed(1)}%). Align with the camera and hold still.`;
+            result.textContent = 'No face detected. Align with the camera and hold still.';
         } catch (error) {
             const message = error instanceof Error ? error.message : 'Unknown detection error';
             camera.setStatus('Detection error', 'error');
