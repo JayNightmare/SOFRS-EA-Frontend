@@ -2,7 +2,7 @@
 
 export function playMusic() {
 	const music = document.createElement("audio");
-	music.src = "./music/music.mp3";
+	music.src = "./music/bg-music.mp3";
 	music.loop = true;
 	music.play();
 }
