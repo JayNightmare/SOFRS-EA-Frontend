@@ -12,6 +12,7 @@
 
 ## Active Tasks
 ### Completed
+- Wrote API endpoints documentation and updated backend README to include team structures and API references.
 - Initial folder structure setup.
 - Basic implementation of Mobile app (6 screens, context, camera scan).
 - Fixed YOLO face detection: removed dual-decoder heuristic, raised area thresholds.
@@ -20,6 +21,8 @@
 - Mobile camera relay: WebSocket server in Electron for no-webcam fallback, mobile relay-capture screen.
 - Vitest test infrastructure for Desktop app (10 passing tests).
 - Backend error handling: security fix (API key leak), CRUD/router/utility error guards, input validation, global exception handler, 20 passing tests.
+- Desktop UI Pivot: Implemented locked Kiosk idle & scanning screens, alongside a hidden 5-tap gesture-secured Admin Dashboard with CRUD interfaces for Employee and Visitor management matching design specifications.
+- Kiosk UI Overhaul: Rebuilt all kiosk views from Figma mockups — overlapping button layout on idle, circular bio-frame camera viewport with animated scan-line, and full Approved/Denied feedback state screens with auto-return logic.
 
 ### Next Steps
 - Continue development as outlined in sub-project documentation.
