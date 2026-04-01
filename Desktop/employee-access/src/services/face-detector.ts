@@ -41,10 +41,13 @@ const normaliseBounds = (
 
 const isForeground = (face: DetectedFace): boolean => {
 	const area = face.width * face.height;
+	const aspectRatio = face.width / Math.max(face.height, 0.0001);
 	const cx = face.x + face.width / 2;
 	const cy = face.y + face.height / 2;
 	const inZone = cx >= 0.18 && cx <= 0.82 && cy >= 0.15 && cy <= 0.85;
-	return area >= 0.04 && inZone;
+	const plausibleShape = aspectRatio >= 0.7 && aspectRatio <= 1.35;
+	const plausibleSize = area >= 0.06 && face.width >= 0.18 && face.height >= 0.18;
+	return plausibleSize && plausibleShape && inZone;
 };
 
 const rankByProminence = (faces: DetectedFace[]): DetectedFace[] =>
@@ -101,7 +104,11 @@ export const detectFaces = async (
 		};
 	}
 
-	if (!video.videoWidth || !video.videoHeight) {
+	if (
+		video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA ||
+		!video.videoWidth ||
+		!video.videoHeight
+	) {
 		return {
 			detected: false,
 			faceCount: 0,

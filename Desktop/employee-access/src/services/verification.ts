@@ -25,6 +25,7 @@ export type VerifyFaceResponse = {
     employee: EmployeeRecord | null;
     similarity: number;
     reasonCode: VerificationReasonCode;
+    bestMatchImageDataUrl: string | null;
 };
 
 const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
@@ -140,6 +141,15 @@ const looksRecognizedMessage = (value: unknown): boolean => {
     );
 };
 
+const extractImageDataUrl = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+
+    const source = value as Record<string, unknown>;
+    return typeof source.data_url === "string" ? source.data_url : null;
+};
+
 const mapResponse = (payload: unknown): VerifyFaceResponse => {
     if (!payload || typeof payload !== "object") {
         return {
@@ -148,6 +158,7 @@ const mapResponse = (payload: unknown): VerifyFaceResponse => {
             employee: null,
             similarity: 0,
             reasonCode: "service-error",
+            bestMatchImageDataUrl: null,
         };
     }
 
@@ -190,6 +201,10 @@ const mapResponse = (payload: unknown): VerifyFaceResponse => {
             : recognized
                 ? "ok"
                 : "unknown-person";
+    const bestMatchImageDataUrl =
+        extractImageDataUrl(source.best_match_image) ??
+        extractImageDataUrl(source.bestMatchImage) ??
+        extractImageDataUrl(source.matched_image);
 
     return {
         recognized,
@@ -202,6 +217,7 @@ const mapResponse = (payload: unknown): VerifyFaceResponse => {
         employee,
         similarity,
         reasonCode,
+        bestMatchImageDataUrl,
     };
 };
 

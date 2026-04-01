@@ -67,6 +67,31 @@ export const createFacePane = (): CameraPane => {
         statusChip.dataset.tone = tone;
     };
 
+    const waitForVideoReady = async (): Promise<void> => {
+        if (video.readyState >= HTMLMediaElement.HAVE_ENOUGH_DATA && video.videoWidth > 0 && video.videoHeight > 0) {
+            return;
+        }
+
+        await new Promise<void>((resolve) => {
+            let settled = false;
+
+            const finish = (): void => {
+                if (settled) {
+                    return;
+                }
+
+                settled = true;
+                video.removeEventListener('loadeddata', finish);
+                video.removeEventListener('canplay', finish);
+                resolve();
+            };
+
+            video.addEventListener('loadeddata', finish, { once: true });
+            video.addEventListener('canplay', finish, { once: true });
+            window.setTimeout(finish, 3000);
+        });
+    };
+
     const start = async (): Promise<void> => {
         if (!navigator.mediaDevices?.getUserMedia) {
             cameraAvailable = false;
@@ -85,6 +110,8 @@ export const createFacePane = (): CameraPane => {
                 audio: false,
             });
             video.srcObject = stream;
+            await video.play().catch(() => undefined);
+            await waitForVideoReady();
             placeholder.style.display = 'none';
             cameraAvailable = true;
             setStatus('Camera online', 'ok');

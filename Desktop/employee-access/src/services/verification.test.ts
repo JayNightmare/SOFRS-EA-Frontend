@@ -112,6 +112,25 @@ describe('verifyFace', () => {
     expect(result.employee?.ownerType).toBe('visitor');
   });
 
+  it('surfaces the backend best match image data url when present', async () => {
+    const apiPayload = {
+      message: 'Welcome back, Alice.',
+      employee: { _id: 'emp-001', fullName: 'Alice Smith' },
+      similarity: 0.92,
+      best_match_image: { data_url: 'data:image/jpeg;base64,best-match-image' },
+    };
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => apiPayload,
+    });
+
+    const file = new File(['fake-jpeg'], 'face.jpg', { type: 'image/jpeg' });
+    const result = await verifyFace(file);
+
+    expect(result.bestMatchImageDataUrl).toBe('data:image/jpeg;base64,best-match-image');
+  });
+
   it('maps an unrecognized response correctly', async () => {
     const apiPayload = {
       message: 'Face not recognized.',
