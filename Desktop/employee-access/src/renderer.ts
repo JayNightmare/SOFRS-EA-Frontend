@@ -1,7 +1,10 @@
-import { createKioskIdleScreen } from './pages/kiosk/idle';
-import { showGlobalLoading, hideGlobalLoading } from './components/loading-overlay';
-import { initBackgroundMusic } from './components/music';
-import { getAppSettings } from './services/settings';
+import { createKioskIdleScreen } from "./pages/kiosk/idle";
+import {
+  showGlobalLoading,
+  hideGlobalLoading,
+} from "./components/loading-overlay";
+import { initBackgroundMusic } from "./components/music";
+import { getAppSettings } from "./services/settings";
 
 export type View = {
   element: HTMLElement;
@@ -9,10 +12,10 @@ export type View = {
   onHide?: () => void;
 };
 
-const appContainer = document.getElementById('app');
+const appContainer = document.getElementById("app");
 
 if (!appContainer) {
-  throw new Error('Expected #app container to render the application.');
+  throw new Error("Expected #app container to render the application.");
 }
 
 let activeView: View | null = null;
@@ -60,21 +63,23 @@ const runNavigation = async (
   }
 };
 
-export const navigate = async (viewFactory: () => View | Promise<View>): Promise<void> => {
-  await runNavigation(viewFactory, 'Loading screen...');
+export const navigate = async (
+  viewFactory: () => View | Promise<View>,
+): Promise<void> => {
+  await runNavigation(viewFactory, "Loading screen...");
 };
 
 const bootstrap = async (): Promise<void> => {
   window.appLifecycle?.onClosing(() => {
-    showGlobalLoading('Closing EmployeeAccess...');
+    showGlobalLoading("Closing EmployeeAccess...");
   });
 
-  window.addEventListener('beforeunload', () => {
-    showGlobalLoading('Closing EmployeeAccess...');
+  window.addEventListener("beforeunload", () => {
+    showGlobalLoading("Closing EmployeeAccess...");
   });
 
   initBackgroundMusic();
-  await runNavigation(createKioskIdleScreen, 'Starting EmployeeAccess...');
+  await runNavigation(createKioskIdleScreen, "Starting EmployeeAccess...");
 };
 
 void bootstrap();

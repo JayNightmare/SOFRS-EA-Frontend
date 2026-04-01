@@ -1,6 +1,6 @@
 {
 	"workbench.colorCustomizations": {
-		"statusBar.background": "#181818"
-	},
+        "statusBar.background": "#181818"
+    },
 	"markdown.validate.enabled": true
 }
