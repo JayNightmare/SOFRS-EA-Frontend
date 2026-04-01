@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import started from "electron-squirrel-startup";
-import { playMusic } from "./components/music";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -11,7 +10,8 @@ if (started) {
 }
 
 // Enable Chromium's FaceDetector API (Shape Detection) for renderer-side face detection.
-app.commandLine.appendSwitch("enable-experimental-web-platform-features");
+app.commandLine.appendSwitch('enable-experimental-web-platform-features');
+console.log("App launched with --enable-experimental-web-platform-features flag for FaceDetector support.");
 
 // NOTE: Hardware acceleration is intentionally left enabled for
 // performant video rendering and canvas operations.
@@ -22,83 +22,109 @@ if (!app.isPackaged) {
 }
 
 const createWindow = () => {
-  const mainWindow = new BrowserWindow({
-    width: 720,
-    height: 1280,
-    minWidth: 420,
-    minHeight: 740,
-    autoHideMenuBar: true,
-    webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
-    },
-  });
+	const mainWindow = new BrowserWindow({
+		width: 720,
+		height: 1280,
+		minWidth: 420,
+		minHeight: 740,
+		autoHideMenuBar: true,
+		webPreferences: {
+			preload: path.join(__dirname, "preload.js"),
+		},
+	});
 
-  if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
-    mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
-  } else {
-    mainWindow.loadFile(
-      path.join(__dirname, `../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`),
-    );
-  }
+	if (MAIN_WINDOW_VITE_DEV_SERVER_URL) {
+		mainWindow.loadURL(MAIN_WINDOW_VITE_DEV_SERVER_URL);
+	} else {
+		mainWindow.loadFile(
+			path.join(
+				__dirname,
+				`../renderer/${MAIN_WINDOW_VITE_NAME}/index.html`,
+			),
+		);
+	}
 
-  mainWindow.webContents.session.setPermissionRequestHandler(
-    (_, permission, callback) => {
-      const allowedPermissions = new Set(["media"]);
-      callback(allowedPermissions.has(permission));
-    },
-  );
+	mainWindow.webContents.session.setPermissionRequestHandler(
+		(_, permission, callback) => {
+			const allowedPermissions = new Set(["media"]);
+			callback(allowedPermissions.has(permission));
+		},
+	);
 
-  mainWindow.setKiosk(true);
-  playMusic();
+	mainWindow.setKiosk(true);
+
+	let allowWindowClose = false;
+	mainWindow.on("close", (event) => {
+		if (allowWindowClose) {
+			return;
+		}
+
+		event.preventDefault();
+		mainWindow.webContents.send("app:closing");
+
+		setTimeout(() => {
+			if (mainWindow.isDestroyed()) {
+				return;
+			}
+
+			allowWindowClose = true;
+			mainWindow.close();
+		}, 450);
+	});
 };
 
 // Ping health endpoint on app start to warm up the API and verify connectivity.
 void (async () => {
-  const baseUrl = import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-  const apiKey = import.meta.env.VITE_API_KEY ?? "";
-  try {
-    const url = new URL("/health", baseUrl);
-    const transport =
-      url.protocol === "https:"
-        ? await import("node:https")
-        : await import("node:http");
-    const req = transport.request(
-      url,
-      {
-        method: "GET",
-        headers: { "X-API-Key": apiKey },
-        timeout: 5000,
-      },
-      (res) => {
-        let body = "";
-        res.on("data", (chunk: Buffer) => {
-          body += chunk.toString();
-        });
-        res.on("end", () => {
-          try {
-            const data = JSON.parse(body);
-            if (data.status !== "healthy") {
-              console.error(
-                "API health check returned unhealthy status:",
-                data,
-              );
-            }
-          } catch {
-            console.error("API health check returned non-JSON response.");
-          }
-        });
-      },
-    );
-    req.on("error", (err: Error) => {
-      console.error("API health check failed on initial load:", err.message);
-    });
-    req.end();
-  } catch (err) {
-    console.error(
-      "API health check failed on initial load. Please check backend connectivity.",
-      err,
-    );
-  }
+	const baseUrl =
+		import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+	const apiKey = import.meta.env.VITE_API_KEY ?? "";
+	try {
+		const url = new URL("/health", baseUrl);
+		const secure = url.protocol === "https:" ? await import("node:https") : await import("node:http");
+		const req = secure.request(
+			url,
+			{
+				method: "GET",
+				headers: { "X-API-Key": apiKey },
+				timeout: 5000,
+			},
+			(res) => {
+				let body = "";
+				res.on("data", (chunk: Buffer) => {
+					body += chunk.toString();
+				});
+				res.on("end", () => {
+					try {
+						const data = JSON.parse(body);
+						if (data.status !== "healthy") {
+							console.error(
+								"API health check returned unhealthy status:",
+								data,
+							);
+						} else {
+							console.log("API health check successful:", data);
+						}
+					} catch {
+						console.error(
+							"API health check returned non-JSON response.",
+						);
+					}
+				});
+			},
+		);
+		req.on("error", (err: Error) => {
+			console.error(
+				"API health check failed on initial load:",
+				err.message,
+			);
+		});
+		req.end();
+	} catch (err) {
+		console.error(
+			"API health check failed on initial load. Please check backend connectivity.",
+			err,
+		);
+	}
 })();
 
 // ─── WebSocket Relay Server (Mobile Camera Fallback) ───

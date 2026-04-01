@@ -2,6 +2,7 @@ import { createFacePane } from '../components/face';
 import { verifyFace } from '../services/verification';
 import { detectFaces, FaceDetectionResult } from '../services/face-detector';
 import type { VerifyFaceResponse, EmployeeRecord } from '../services/verification';
+import { resolveMobileSetupUrl } from '../services/settings';
 
 type MainScreenView = {
     element: HTMLElement;
@@ -26,12 +27,7 @@ type Stage =
 const ENROLLMENT_POSES = ['Front', 'Left', 'Right', 'Up', 'Down'];
 
 const getMobileSetupUrl = (): string => {
-    const configured = import.meta.env.VITE_MOBILE_SETUP_URL;
-    if (configured && configured.trim().length > 0) {
-        return configured.trim();
-    }
-
-    return 'https://sofrs-mobile.local/face-setup';
+    return resolveMobileSetupUrl();
 };
 
 const getToneFromStage = (stage: Stage): StatusTone => {

@@ -88,10 +88,17 @@ export const createSvgIcon = (
 	svgPath: string,
 	viewBox = "0 0 24 24",
 	className = "kiosk-icon",
+	size?: number | string,
 ): SVGSVGElement => {
 	const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
 	svg.setAttribute("viewBox", viewBox);
 	svg.setAttribute("class", className);
+
+	if (size !== undefined) {
+		const normalizedSize = typeof size === "number" ? `${size}` : size;
+		svg.setAttribute("width", normalizedSize);
+		svg.setAttribute("height", normalizedSize);
+	}
 
 	const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
 	path.setAttribute("d", svgPath);
@@ -107,4 +114,5 @@ export const createSvgIcon = (
 export const svgIconHtml = (
 	pathKey: keyof typeof ICON_PATHS,
 	className = "kiosk-icon",
-): string => createSvgIcon(ICON_PATHS[pathKey], "0 0 24 24", className).outerHTML;
+	size?: number | string,
+): string => createSvgIcon(ICON_PATHS[pathKey], "0 0 24 24", className, size).outerHTML;

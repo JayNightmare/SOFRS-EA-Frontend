@@ -60,7 +60,7 @@ export const checkApiHealth = async (): Promise<boolean> => {
         const response = await fetch(new URL(HEALTH_PATH, getApiBaseUrl()).toString(), {
             method: 'GET',
             headers: {
-                'X-API-Key': import.meta.env.VITE_API_KEY || '',
+                'X-API-Key': API_KEY,
             },
         });
 
@@ -231,15 +231,42 @@ export const verifyFace = async (
     formData.append("image", file);
     formData.append("database_path", databasePath);
 
-    console.log("Sending verification request to:", endpoint, "database_path:", databasePath);
+    const endpoint = getVerifyEndpoint();
+    const startedAt = performance.now();
+    console.log("[verification] Sending request", {
+        endpoint,
+        databasePath,
+        fileName: file.name,
+        fileSize: file.size,
+        hasApiKey: API_KEY.length > 0,
+    });
 
-    const response = await fetch(endpoint, {
-        method: "POST",
-        body: formData,
-        signal,
-        headers: {
-            "X-API-Key": import.meta.env.VITE_API_KEY || "",
-        },
+    let response: Response;
+    try {
+        response = await fetch(endpoint, {
+            method: "POST",
+            body: formData,
+            signal,
+            headers: {
+                "X-API-Key": API_KEY,
+            },
+        });
+    } catch (error) {
+        console.error("[verification] Network/request error", {
+            endpoint,
+            databasePath,
+            elapsedMs: Math.round(performance.now() - startedAt),
+            error,
+        });
+        throw error;
+    }
+
+    console.log("[verification] Response received", {
+        endpoint,
+        databasePath,
+        status: response.status,
+        ok: response.ok,
+        elapsedMs: Math.round(performance.now() - startedAt),
     });
 
     if (!response.ok) {
@@ -254,6 +281,13 @@ export const verifyFace = async (
             errorDetail = "";
         }
 
+        console.error("[verification] Verification failed", {
+            endpoint,
+            databasePath,
+            status: response.status,
+            detail: errorDetail,
+        });
+
         throw new Error(
             errorDetail
                 ? `Verification request failed with status ${response.status}: ${errorDetail}`
@@ -262,5 +296,12 @@ export const verifyFace = async (
     }
 
     const payload = await response.json();
-    return mapResponse(payload);
+    const mapped = mapResponse(payload);
+    console.log("[verification] Parsed response", {
+        recognized: mapped.recognized,
+        reasonCode: mapped.reasonCode,
+        similarity: mapped.similarity,
+        employeeId: mapped.employee?.id,
+    });
+    return mapped;
 };

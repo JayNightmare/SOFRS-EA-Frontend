@@ -26,6 +26,13 @@ export interface FaceDetectionResult {
 	reasonCode: "ok" | "no-face" | "multiple-faces" | "face-out-of-zone" | "not-supported";
 }
 
+const MIN_FACE_AREA = 0.04;
+const MAX_FACE_AREA = 0.35;
+const MIN_CENTER_X = 0.18;
+const MAX_CENTER_X = 0.82;
+const MIN_CENTER_Y = 0.15;
+const MAX_CENTER_Y = 0.85;
+
 /** Normalise a raw DOMRect bounding box relative to the source dimensions. */
 const normaliseBounds = (
 	bounds: DOMRectReadOnly,
@@ -48,6 +55,33 @@ const isForeground = (face: DetectedFace): boolean => {
 	const plausibleShape = aspectRatio >= 0.7 && aspectRatio <= 1.35;
 	const plausibleSize = area >= 0.06 && face.width >= 0.18 && face.height >= 0.18;
 	return plausibleSize && plausibleShape && inZone;
+	const inZone =
+		cx >= MIN_CENTER_X &&
+		cx <= MAX_CENTER_X &&
+		cy >= MIN_CENTER_Y &&
+		cy <= MAX_CENTER_Y;
+	const inSizeRange = area >= MIN_FACE_AREA && area <= MAX_FACE_AREA;
+	return inSizeRange && inZone;
+};
+
+const getOutOfZoneMessage = (face: DetectedFace): string => {
+	const area = face.width * face.height;
+	const cx = face.x + face.width / 2;
+	const cy = face.y + face.height / 2;
+
+	if (area < MIN_FACE_AREA) {
+		return "Move closer to the camera.";
+	}
+
+	if (area > MAX_FACE_AREA) {
+		return "Step back a little. Your face is too close.";
+	}
+
+	if (cx < MIN_CENTER_X || cx > MAX_CENTER_X || cy < MIN_CENTER_Y || cy > MAX_CENTER_Y) {
+		return "Center your face inside the guide.";
+	}
+
+	return "Move closer and centre your face.";
 };
 
 const rankByProminence = (faces: DetectedFace[]): DetectedFace[] =>
@@ -59,29 +93,142 @@ const rankByProminence = (faces: DetectedFace[]): DetectedFace[] =>
 
 let detector: FaceDetector | null = null;
 let supported: boolean | null = null;
+let notSupportedMessage: string | null = null;
+let supportProbePromise: Promise<boolean> | null = null;
+
+const DEFAULT_NOT_SUPPORTED_MESSAGE =
+	"Face detection is unavailable on this device. Open Settings and run Camera Check to use mobile relay capture.";
+
+const markNotSupported = (message: string): void => {
+	supported = false;
+	detector = null;
+	notSupportedMessage = message;
+};
+
+const isNotSupportedError = (error: unknown): boolean => {
+	const errorName = error instanceof Error ? error.name : "UnknownError";
+	const errorMessage = error instanceof Error ? error.message : String(error);
+
+	return (
+		errorName === "NotSupportedError" ||
+		/face detection service unavailable/i.test(errorMessage)
+	);
+};
+
+/**
+ * Capability check recommended by Chrome docs:
+ * constructor presence is not enough, we also probe a tiny canvas detect.
+ */
+const ensureDetectorSupport = async (): Promise<boolean> => {
+	if (supported !== null) {
+		return supported;
+	}
+
+	if (typeof FaceDetector === "undefined") {
+		markNotSupported(
+			"FaceDetector API unavailable. Ensure --enable-experimental-web-platform-features is enabled.",
+		);
+		console.warn(notSupportedMessage);
+		return false;
+	}
+
+	if (!supportProbePromise) {
+		console.log("Probing FaceDetector support...");
+		supportProbePromise = (async () => {
+			try {
+				console.log("Running FaceDetector support probe...");
+				const probe = new FaceDetector({ maxDetectedFaces: 1, fastMode: true });
+				console.log("FaceDetector instance created for support probe. Testing detect on a dummy canvas...");
+				const probeCanvas = document.createElement("canvas");
+				console.log("Running detect on probe canvas...");
+				probeCanvas.width = 2;
+				probeCanvas.height = 2;
+				console.log("Awaiting detect on probe canvas...");
+				try {
+					console.log("Calling detect on probe canvas...");
+					await probe.detect(probeCanvas);
+				} catch (error) {
+					console.warn("FaceDetector support probe detect call failed", {
+						error,
+					});
+					if (isNotSupportedError(error)) {
+						throw error;
+					}
+				}
+				console.log("FaceDetector support probe detect call succeeded.");
+
+				supported = true;
+				notSupportedMessage = null;
+				console.log("FaceDetector support probe successful");
+				return true;
+			} catch (error) {
+				console.log("FaceDetector support probe failed");
+
+				if (isNotSupportedError(error)) {
+					markNotSupported(
+						"Face detection service unavailable on this kiosk. Open Settings and run Camera Check to switch to mobile relay capture.",
+					);
+					console.warn("[face-detector] FaceDetector support probe failed", {
+						error,
+					});
+					return false;
+				}
+
+				// Non-support errors (for example transient canvas state) should not permanently disable detection.
+				console.warn("[face-detector] Support probe hit a non-blocking error", {
+					error,
+				});
+				supported = true;
+				notSupportedMessage = null;
+				return true;
+			} finally {
+				supportProbePromise = null;
+			}
+		})();
+	}
+
+	return supportProbePromise;
+};
 
 /**
  * Lazily initialise the native FaceDetector.
  * Returns null if the API is unavailable.
  */
-const getDetector = (): FaceDetector | null => {
-	if (supported === false) return null;
-
-	if (typeof FaceDetector === "undefined") {
-		supported = false;
-		console.warn(
-			"FaceDetector API unavailable. Ensure --enable-experimental-web-platform-features is set.",
-		);
-		return null;
-	}
+const getDetector = async (): Promise<FaceDetector | null> => {
+	const isSupported = await ensureDetectorSupport();
+	if (!isSupported) return null;
 
 	if (!detector) {
-		supported = true;
-		detector = new FaceDetector({ maxDetectedFaces: 5, fastMode: true });
+		try {
+			console.log("Initializing FaceDetector...");
+			detector = new FaceDetector({ maxDetectedFaces: 5, fastMode: false });
+		} catch (error) {
+			if (isNotSupportedError(error)) {
+				markNotSupported(
+					"Face detection service unavailable on this kiosk. Open Settings and run Camera Check to switch to mobile relay capture.",
+				);
+				console.warn("[face-detector] FaceDetector constructor unavailable", {
+					error,
+				});
+				return null;
+			}
+
+			throw error;
+		}
 	}
 
 	return detector;
 };
+
+const buildNotSupportedResult = (message?: string): FaceDetectionResult => ({
+	detected: false,
+	faceCount: 0,
+	hasSingleForegroundFace: false,
+	primaryFace: null,
+	faces: [],
+	message: message ?? notSupportedMessage ?? DEFAULT_NOT_SUPPORTED_MESSAGE,
+	reasonCode: "not-supported",
+});
 
 /**
  * Detect faces directly from a video element.
@@ -90,18 +237,10 @@ const getDetector = (): FaceDetector | null => {
 export const detectFaces = async (
 	video: HTMLVideoElement,
 ): Promise<FaceDetectionResult> => {
-	const fd = getDetector();
+	const fd = await getDetector();
 
 	if (!fd) {
-		return {
-			detected: false,
-			faceCount: 0,
-			hasSingleForegroundFace: false,
-			primaryFace: null,
-			faces: [],
-			message: "FaceDetector API is not available.",
-			reasonCode: "not-supported",
-		};
+		return buildNotSupportedResult();
 	}
 
 	if (
@@ -120,32 +259,32 @@ export const detectFaces = async (
 		};
 	}
 
+	// let raw: Awaited<ReturnType<FaceDetector['detect']>>;
 	let raw: DetectedFaceNative[];
-
 	try {
 		raw = await fd.detect(video);
 	} catch (error) {
-		const notSupported =
-			error instanceof DOMException && error.name === "NotSupportedError";
-
-		if (notSupported) {
-			supported = false;
-			detector = null;
-			console.warn("FaceDetector service unavailable. Falling back to backend verification.", error);
-			return {
-				detected: false,
-				faceCount: 0,
-				hasSingleForegroundFace: false,
-				primaryFace: null,
-				faces: [],
-				message: "Local face detection is unavailable on this device.",
-				reasonCode: "not-supported",
-			};
+		if (isNotSupportedError(error)) {
+			markNotSupported(
+				"Face detection service unavailable on this kiosk. Open Settings and run Camera Check to switch to mobile relay capture.",
+			);
+			const errorName = error instanceof Error ? error.name : "UnknownError";
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			console.warn("[face-detector] Native face detector unavailable", {
+				errorName,
+				errorMessage,
+			});
+			return buildNotSupportedResult();
 		}
 
+		console.error("[face-detector] FaceDetector.detect failed", {
+			error,
+			videoReadyState: video.readyState,
+			videoWidth: video.videoWidth,
+			videoHeight: video.videoHeight,
+		});
 		throw error;
 	}
-
 	const faces = rankByProminence(
 		raw.map((f) => normaliseBounds(f.boundingBox, video.videoWidth, video.videoHeight)),
 	);
@@ -178,14 +317,14 @@ export const detectFaces = async (
 	const foregroundFaces = faces.filter(isForeground);
 	const hasSingleForegroundFace = foregroundFaces.length === 1 && isForeground(primary);
 
-	if (faces.length > 1 && foregroundFaces.length > 1) {
+	if (faces.length > 1) {
 		return {
 			detected: true,
 			faceCount: faces.length,
 			hasSingleForegroundFace: false,
 			primaryFace: primary,
 			faces,
-			message: "Multiple faces detected.",
+			message: "Multiple faces detected. Only one person can scan at a time.",
 			reasonCode: "multiple-faces",
 		};
 	}
@@ -197,7 +336,7 @@ export const detectFaces = async (
 			hasSingleForegroundFace: false,
 			primaryFace: primary,
 			faces,
-			message: "Move closer and centre your face.",
+			message: getOutOfZoneMessage(primary),
 			reasonCode: "face-out-of-zone",
 		};
 	}

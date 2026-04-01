@@ -1,6 +1,6 @@
 /**
  * Lightweight weather service using the free Open-Meteo API.
- * No API key required — geocodes via ip-api.com, then fetches current weather.
+ * No API key required — geocodes via ipapi.co over HTTPS, then fetches current weather.
  */
 
 export interface WeatherData {
@@ -40,8 +40,8 @@ const FALLBACK: WeatherData = {
 };
 
 interface GeoResponse {
-	lat: number;
-	lon: number;
+	latitude?: number;
+	longitude?: number;
 }
 
 interface OpenMeteoResponse {
@@ -52,17 +52,25 @@ interface OpenMeteoResponse {
 }
 
 /**
- * Fetches the user's approximate coordinates via ip-api (free, no key).
+ * Fetches the user's approximate coordinates via HTTPS geolocation.
  * Falls back to London if the request fails.
  */
 const getCoordinates = async (): Promise<{ lat: number; lon: number }> => {
 	try {
-		const res = await fetch("http://ip-api.com/json/?fields=lat,lon", {
+		const res = await fetch("https://ipapi.co/json/", {
 			signal: AbortSignal.timeout(3000),
 		});
 		if (!res.ok) throw new Error(`Status ${res.status}`);
 		const data = (await res.json()) as GeoResponse;
-		return { lat: data.lat, lon: data.lon };
+
+		if (
+			typeof data.latitude !== "number" ||
+			typeof data.longitude !== "number"
+		) {
+			throw new Error("Missing latitude/longitude in geolocation response");
+		}
+
+		return { lat: data.latitude, lon: data.longitude };
 	} catch {
 		return { lat: 51.5074, lon: -0.1278 }; // London fallback
 	}

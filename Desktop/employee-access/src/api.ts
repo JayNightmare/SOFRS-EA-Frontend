@@ -1,5 +1,8 @@
-const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
+const BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
+console.log('API base URL:', BASE_URL);
 const API_KEY = import.meta.env.VITE_API_KEY ?? '';
+const SUPPORT_WEBHOOK_URL =
+  import.meta.env.VITE_DISCORD_HELP_WEBHOOK_URL ?? null;
 
 function getHeaders(): HeadersInit {
   const headers: Record<string, string> = {
@@ -40,6 +43,15 @@ export interface VisitorCreate {
   DoB?: string;
   email?: string;
   Phone?: string;
+}
+
+export interface HelpTicketPayload {
+  requesterName: string;
+  requesterEmail?: string;
+  requesterEmployeeId?: string;
+  issueType: string;
+  location?: string;
+  message: string;
 }
 
 export interface ImageSearchMatch {
@@ -133,6 +145,62 @@ export async function uploadImages(ownerId: string, files: Blob[]): Promise<{
     body: form,
   });
   return handleResponse(res);
+}
+
+export async function submitHelpTicket(payload: HelpTicketPayload): Promise<void> {
+  const clean = (value: string | undefined): string => value?.trim() ?? '';
+  const requesterName = clean(payload.requesterName);
+  const requesterEmail = clean(payload.requesterEmail);
+  const requesterEmployeeId = clean(payload.requesterEmployeeId);
+  const location = clean(payload.location);
+  const message = clean(payload.message);
+  const issueType = clean(payload.issueType) || 'General';
+
+  if (!requesterName) {
+    throw new ApiError('Requester name is required', 400);
+  }
+
+  if (!message) {
+    throw new ApiError('Support message is required', 400);
+  }
+
+  const lines: string[] = [
+    '**SOFRS Support Ticket**',
+    `**Name:** ${requesterName}`,
+    `**Issue Type:** ${issueType}`,
+    `**Message:** ${message}`,
+  ];
+
+  if (requesterEmployeeId) {
+    lines.push(`**Employee ID:** ${requesterEmployeeId}`);
+  }
+
+  if (requesterEmail) {
+    lines.push(`**Email:** ${requesterEmail}`);
+  }
+
+  if (location) {
+    lines.push(`**Location:** ${location}`);
+  }
+
+  lines.push(`**Submitted:** ${new Date().toISOString()}`);
+
+  const res = await fetch(SUPPORT_WEBHOOK_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content: lines.join('\n') }),
+  });
+
+  if (!res.ok) {
+    let detail: string | undefined;
+    try {
+      detail = await res.text();
+    } catch {
+      detail = undefined;
+    }
+
+    throw new ApiError('Failed to submit support ticket', res.status, detail);
+  }
 }
 
 export { ApiError };
