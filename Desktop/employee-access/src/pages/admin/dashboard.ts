@@ -53,9 +53,14 @@ export const createAdminDashboard = (): View => {
 		if (currentAdminView?.onHide) currentAdminView.onHide();
 		contentWrapper.replaceChildren();
 
+		const loading = document.createElement("div");
+		loading.className = "admin-view-loading";
+		loading.textContent = "Loading section...";
+		contentWrapper.append(loading);
+
 		const view = await factory();
 		currentAdminView = view;
-		contentWrapper.append(view.element);
+		contentWrapper.replaceChildren(view.element);
 
 		if (view.onShow) await view.onShow();
 	};

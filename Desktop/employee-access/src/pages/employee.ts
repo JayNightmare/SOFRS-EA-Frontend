@@ -68,6 +68,18 @@ export const createEmployeePage = ({ onBack, onGoVisitor }: EmployeePageHandlers
         try {
             const response = await detectFaces(camera.getVideoElement());
 
+            if (response.reasonCode === 'not-supported') {
+                if (timer) {
+                    clearInterval(timer);
+                    timer = null;
+                }
+
+                camera.setStatus('Face scan unavailable', 'error');
+                result.dataset.tone = 'error';
+                result.textContent = response.message;
+                return;
+            }
+
             if (response.detected) {
                 camera.setStatus('Face detected', 'ok');
                 if (!hasSearchedBackend) {

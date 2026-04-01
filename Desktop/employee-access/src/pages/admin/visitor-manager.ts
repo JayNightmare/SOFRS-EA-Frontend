@@ -8,7 +8,7 @@ export type Visitor = {
   expires_at: string;
 };
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export const createVisitorManager = (): View => {
   const container = document.createElement('div');
@@ -16,10 +16,10 @@ export const createVisitorManager = (): View => {
 
   const header = document.createElement('div');
   header.className = 'crud-header';
-  
+
   const title = document.createElement('h2');
   title.textContent = 'Visitor Management';
-  
+
   const btnCreate = document.createElement('button');
   btnCreate.className = 'crud-btn primary';
   btnCreate.textContent = '+ Add Visitor';
@@ -53,7 +53,7 @@ export const createVisitorManager = (): View => {
     try {
       const resp = await fetch(`${API_BASE}/visitor/`);
       const data: Visitor[] = await resp.json();
-      
+
       const tbody = container.querySelector('#vis-tbody');
       if (!tbody) return;
 
@@ -108,10 +108,10 @@ export const createVisitorManager = (): View => {
     const isEdit = !!vis;
     const overlay = document.createElement('div');
     overlay.className = 'crud-overlay';
-    
+
     const modal = document.createElement('div');
     modal.className = 'crud-modal';
-    
+
     const formatDateTimeLocal = (isoString?: string) => {
       if (!isoString) return '';
       const date = new Date(isoString);
@@ -159,7 +159,7 @@ export const createVisitorManager = (): View => {
     modal.querySelector('#vis-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target as HTMLFormElement;
-      
+
       const payload = {
         id: (form.querySelector('#vis-id') as HTMLInputElement).value,
         name: (form.querySelector('#vis-name') as HTMLInputElement).value,

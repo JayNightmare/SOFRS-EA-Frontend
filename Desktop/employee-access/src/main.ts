@@ -3,7 +3,6 @@ import os from "node:os";
 import path from "node:path";
 import { WebSocketServer, WebSocket } from "ws";
 import started from "electron-squirrel-startup";
-import { playMusic } from "./components/music";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
@@ -11,7 +10,8 @@ if (started) {
 }
 
 // Enable Chromium's FaceDetector API (Shape Detection) for renderer-side face detection.
-app.commandLine.appendSwitch("enable-experimental-web-platform-features");
+app.commandLine.appendSwitch('enable-experimental-web-platform-features');
+console.log("App launched with --enable-experimental-web-platform-features flag for FaceDetector support.");
 
 // NOTE: Hardware acceleration is intentionally left enabled for
 // performant video rendering and canvas operations.
@@ -52,18 +52,36 @@ const createWindow = () => {
 	);
 
 	mainWindow.setKiosk(true);
-	playMusic();
+
+	let allowWindowClose = false;
+	mainWindow.on("close", (event) => {
+		if (allowWindowClose) {
+			return;
+		}
+
+		event.preventDefault();
+		mainWindow.webContents.send("app:closing");
+
+		setTimeout(() => {
+			if (mainWindow.isDestroyed()) {
+				return;
+			}
+
+			allowWindowClose = true;
+			mainWindow.close();
+		}, 450);
+	});
 };
 
 // Ping health endpoint on app start to warm up the API and verify connectivity.
 void (async () => {
 	const baseUrl =
-		process.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
-	const apiKey = process.env.VITE_API_KEY ?? "";
+		import.meta.env.VITE_API_BASE_URL ?? "http://127.0.0.1:8000";
+	const apiKey = import.meta.env.VITE_API_KEY ?? "";
 	try {
-		const http = await import("node:http");
 		const url = new URL("/health", baseUrl);
-		const req = http.request(
+		const secure = url.protocol === "https:" ? await import("node:https") : await import("node:http");
+		const req = secure.request(
 			url,
 			{
 				method: "GET",
@@ -83,6 +101,8 @@ void (async () => {
 								"API health check returned unhealthy status:",
 								data,
 							);
+						} else {
+							console.log("API health check successful:", data);
 						}
 					} catch {
 						console.error(

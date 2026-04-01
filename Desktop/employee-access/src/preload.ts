@@ -12,3 +12,14 @@ contextBridge.exposeInMainWorld('relay', {
         ipcRenderer.removeAllListeners('relay:photo');
     },
 });
+
+contextBridge.exposeInMainWorld('appLifecycle', {
+    onClosing: (callback: () => void): void => {
+        ipcRenderer.on('app:closing', () => {
+            callback();
+        });
+    },
+    removeClosingListener: (): void => {
+        ipcRenderer.removeAllListeners('app:closing');
+    },
+});

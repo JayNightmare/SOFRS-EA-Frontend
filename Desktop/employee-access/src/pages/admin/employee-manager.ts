@@ -7,7 +7,7 @@ export type Employee = {
   title: string;
 };
 
-const API_BASE = 'http://127.0.0.1:8000';
+const API_BASE = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000';
 
 export const createEmployeeManager = (): View => {
   const container = document.createElement('div');
@@ -15,10 +15,10 @@ export const createEmployeeManager = (): View => {
 
   const header = document.createElement('div');
   header.className = 'crud-header';
-  
+
   const title = document.createElement('h2');
   title.textContent = 'Employee Management';
-  
+
   const btnCreate = document.createElement('button');
   btnCreate.className = 'crud-btn primary';
   btnCreate.textContent = '+ Add Employee';
@@ -52,7 +52,7 @@ export const createEmployeeManager = (): View => {
     try {
       const resp = await fetch(`${API_BASE}/employee/`);
       const data: Employee[] = await resp.json();
-      
+
       const tbody = container.querySelector('#emp-tbody');
       if (!tbody) return;
 
@@ -104,13 +104,13 @@ export const createEmployeeManager = (): View => {
 
   const showForm = (emp?: Employee) => {
     const isEdit = !!emp;
-    
+
     const overlay = document.createElement('div');
     overlay.className = 'crud-overlay';
-    
+
     const modal = document.createElement('div');
     modal.className = 'crud-modal';
-    
+
     modal.innerHTML = `
       <h3>${isEdit ? 'Edit' : 'Add'} Employee</h3>
       <form id="emp-form">
@@ -147,7 +147,7 @@ export const createEmployeeManager = (): View => {
     modal.querySelector('#emp-form')?.addEventListener('submit', async (e) => {
       e.preventDefault();
       const form = e.target as HTMLFormElement;
-      
+
       const payload = {
         id: (form.querySelector('#emp-id') as HTMLInputElement).value,
         name: (form.querySelector('#emp-name') as HTMLInputElement).value,

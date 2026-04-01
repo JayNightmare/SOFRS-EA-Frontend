@@ -1,6 +1,10 @@
 import { View, navigate } from "../../renderer";
 import { createKioskScanScreen } from "./scan";
 import { createAdminPinModal } from "./pin-modal";
+import {
+	createEmployeeFaceRegisterScreen,
+	createVisitorRegisterScreen,
+} from "./register";
 import { createSvgIcon, ICON_PATHS, svgIconHtml } from "../../components/icons";
 import { fetchWeather } from "../../services/weather";
 
@@ -96,7 +100,7 @@ export const createKioskIdleScreen = (): View => {
 	const subTitle = document.createElement("p");
 	subTitle.className = "kiosk-subtitle";
 	subTitle.textContent =
-		"Please tap below to start your shift or manage your visitor status.";
+		"Please tap below to check in, register a visitor, or enroll an employee face profile.";
 
 	titleGroup.append(mainTitle, subTitle);
 
@@ -111,6 +115,9 @@ export const createKioskIdleScreen = (): View => {
     <h3>Visitor?</h3>
     <p>Register for a pass here.</p>
   `;
+	visitorBtn.addEventListener("click", () => {
+		void navigate(createVisitorRegisterScreen);
+	});
 
 	// CheckIn Btn
 	const checkInBtn = document.createElement("button");
@@ -123,19 +130,19 @@ export const createKioskIdleScreen = (): View => {
 		void navigate(() => createKioskScanScreen("check-in"));
 	});
 
-	// CheckOut Btn
-	const checkOutBtn = document.createElement("button");
-	checkOutBtn.className = "kiosk-btn secondary";
-	checkOutBtn.innerHTML = `
-    <div class="icon-wrap">${createSvgIcon(ICON_PATHS.checkOut).outerHTML}</div>
-    <h3>Checking Out?</h3>
-    <p>Swipe your card to exit.</p>
+	// Employee Register Btn
+	const employeeRegisterBtn = document.createElement("button");
+	employeeRegisterBtn.className = "kiosk-btn secondary";
+	employeeRegisterBtn.innerHTML = `
+    <div class="icon-wrap">${createSvgIcon(ICON_PATHS.fingerprint).outerHTML}</div>
+    <h3>Employee?</h3>
+    <p>Register your face profile here.</p>
   `;
-	checkOutBtn.addEventListener("click", () => {
-		void navigate(() => createKioskScanScreen("check-out"));
+	employeeRegisterBtn.addEventListener("click", () => {
+		void navigate(createEmployeeFaceRegisterScreen);
 	});
 
-	actionGroup.append(visitorBtn, checkInBtn, checkOutBtn);
+	actionGroup.append(visitorBtn, checkInBtn, employeeRegisterBtn);
 	main.append(titleGroup, actionGroup);
 
 	// --- Footer ---

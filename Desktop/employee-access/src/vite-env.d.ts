@@ -5,6 +5,11 @@ declare module '*.css' {
 	export default cssContent;
 }
 
+declare module '*.mp3' {
+	const audioSource: string;
+	export default audioSource;
+}
+
 interface ImportMetaEnv {
 	readonly VITE_API_BASE_URL?: string;
 	readonly VITE_API_KEY?: string;
@@ -37,5 +42,9 @@ interface Window {
 		getLocalIp: () => Promise<string>;
 		onPhoto: (callback: (dataUrl: string) => void) => void;
 		removePhotoListener: () => void;
+	};
+	appLifecycle?: {
+		onClosing: (callback: () => void) => void;
+		removeClosingListener: () => void;
 	};
 }
