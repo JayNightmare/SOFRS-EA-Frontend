@@ -113,7 +113,32 @@ export const detectFaces = async (
 		};
 	}
 
-	const raw = await fd.detect(video);
+	let raw: DetectedFaceNative[];
+
+	try {
+		raw = await fd.detect(video);
+	} catch (error) {
+		const notSupported =
+			error instanceof DOMException && error.name === "NotSupportedError";
+
+		if (notSupported) {
+			supported = false;
+			detector = null;
+			console.warn("FaceDetector service unavailable. Falling back to backend verification.", error);
+			return {
+				detected: false,
+				faceCount: 0,
+				hasSingleForegroundFace: false,
+				primaryFace: null,
+				faces: [],
+				message: "Local face detection is unavailable on this device.",
+				reasonCode: "not-supported",
+			};
+		}
+
+		throw error;
+	}
+
 	const faces = rankByProminence(
 		raw.map((f) => normaliseBounds(f.boundingBox, video.videoWidth, video.videoHeight)),
 	);

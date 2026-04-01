@@ -27,16 +27,36 @@ export type VerifyFaceResponse = {
     reasonCode: VerificationReasonCode;
 };
 
-const getVerifyEndpoint = (): string => {
-    const endpoint = import.meta.env.VITE_API_BASE_URL + '/image/search';
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const VERIFY_PATH = "/image/search";
+const HEALTH_PATH = "/health";
 
-    return endpoint;
+const getConfiguredValue = (value?: string): string | null => {
+    if (!value) {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+};
+
+const getApiBaseUrl = (): string =>
+    getConfiguredValue(import.meta.env.VITE_API_BASE_URL) ??
+    DEFAULT_API_BASE_URL;
+
+const getVerifyEndpoint = (): string => {
+    const explicitEndpoint = getConfiguredValue(import.meta.env.VITE_VERIFY_ENDPOINT);
+    if (explicitEndpoint) {
+        return explicitEndpoint;
+    }
+
+    return new URL(VERIFY_PATH, getApiBaseUrl()).toString();
 };
 
 // Send a Health Check to the API to verify it's reachable and responding correctly
 export const checkApiHealth = async (): Promise<boolean> => {
     try {
-        const response = await fetch(import.meta.env.VITE_API_BASE_URL + '/health', {
+        const response = await fetch(new URL(HEALTH_PATH, getApiBaseUrl()).toString(), {
             method: 'GET',
             headers: {
                 'X-API-Key': import.meta.env.VITE_API_KEY || '',
@@ -190,13 +210,14 @@ export const verifyFace = async (
     databasePath = "temp_images",
     signal?: AbortSignal,
 ): Promise<VerifyFaceResponse> => {
+    const endpoint = getVerifyEndpoint();
     const formData = new FormData();
     formData.append("image", file);
     formData.append("database_path", databasePath);
 
-    console.log("Sending verification request to:", getVerifyEndpoint());
+    console.log("Sending verification request to:", endpoint, "database_path:", databasePath);
 
-    const response = await fetch(getVerifyEndpoint(), {
+    const response = await fetch(endpoint, {
         method: "POST",
         body: formData,
         signal,

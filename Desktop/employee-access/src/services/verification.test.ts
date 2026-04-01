@@ -8,10 +8,12 @@ describe('verifyFace', () => {
   const mockFetch = vi.fn();
 
   beforeEach(() => {
+    mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -37,6 +39,56 @@ describe('verifyFace', () => {
     expect(result.employee?.ownerType).toBe('employee');
     expect(result.similarity).toBeCloseTo(0.92);
     expect(result.reasonCode).toBe('ok');
+  });
+
+  it('uses VITE_VERIFY_ENDPOINT when provided', async () => {
+    vi.stubEnv('VITE_VERIFY_ENDPOINT', 'https://verify.example.com/custom-search');
+    vi.stubEnv('VITE_API_BASE_URL', 'https://api.example.com');
+
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ message: 'Face not recognized.', similarity: 0 }),
+    });
+
+    const file = new File(['fake-jpeg'], 'face.jpg', { type: 'image/jpeg' });
+    await verifyFace(file);
+
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://verify.example.com/custom-search',
+      expect.objectContaining({ method: 'POST' }),
+    );
+  });
+
+  it('falls back to the API base URL when verify endpoint is not set', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ message: 'Face not recognized.', similarity: 0 }),
+    });
+
+    const file = new File(['fake-jpeg'], 'face.jpg', { type: 'image/jpeg' });
+    await verifyFace(file);
+
+    const [requestUrl, requestInit] = mockFetch.mock.calls[0] ?? [];
+    expect(requestInit).toEqual(expect.objectContaining({ method: 'POST' }));
+    expect(typeof requestUrl).toBe('string');
+    expect(() => new URL(requestUrl)).not.toThrow();
+    expect(new URL(requestUrl).pathname).toBe('/image/search');
+  });
+
+  it('falls back to localhost when no API env is set', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ message: 'Face not recognized.', similarity: 0 }),
+    });
+
+    const file = new File(['fake-jpeg'], 'face.jpg', { type: 'image/jpeg' });
+    await verifyFace(file);
+
+    const [requestUrl, requestInit] = mockFetch.mock.calls[0] ?? [];
+    expect(requestInit).toEqual(expect.objectContaining({ method: 'POST' }));
+    expect(typeof requestUrl).toBe('string');
+    expect(requestUrl).not.toContain('undefined');
+    expect(new URL(requestUrl).pathname).toBe('/image/search');
   });
 
   it('maps visitor owner_type from matched_identity', async () => {
@@ -148,10 +200,12 @@ describe('checkApiHealth', () => {
   const mockFetch = vi.fn();
 
   beforeEach(() => {
+    mockFetch.mockReset();
     vi.stubGlobal('fetch', mockFetch);
   });
 
   afterEach(() => {
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
   });
 
@@ -162,6 +216,11 @@ describe('checkApiHealth', () => {
     });
 
     expect(await checkApiHealth()).toBe(true);
+    const [requestUrl, requestInit] = mockFetch.mock.calls[0] ?? [];
+    expect(requestInit).toEqual(expect.objectContaining({ method: 'GET' }));
+    expect(typeof requestUrl).toBe('string');
+    expect(requestUrl).not.toContain('undefined');
+    expect(new URL(requestUrl).pathname).toBe('/health');
   });
 
   it('returns false when API responds unhealthy', async () => {

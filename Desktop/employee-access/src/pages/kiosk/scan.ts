@@ -109,6 +109,7 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   let detectionTimer: ReturnType<typeof setInterval> | null = null;
   let verifying = false;
   let detecting = false;
+  let resultLocked = false;
   let lastResponse: VerifyFaceResponse | null = null;
 
   btnConfirm.addEventListener('click', () => {
@@ -138,10 +139,12 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       const emp = response.employee;
       tokenInfo.innerHTML = `<span class="icon">${svgIconHtml('fingerprint')}</span><div><small>TOKEN ID</small><p>${emp?.id || 'VERIFIED'}</p></div>`;
       timeInfo.innerHTML = `<span class="icon">${svgIconHtml('clock')}</span><div><small>TIMESTAMP</small><p>${new Date().toLocaleTimeString()}</p></div>`;
+      faceCamera.setStatus('Identity verified', 'ok');
     } else {
       matchPercent.textContent = 'FAIL';
       matchImg.style.display = 'none';
       tokenInfo.innerHTML = `<span class="icon">${svgIconHtml('fingerprint')}</span><div><small>TOKEN ID</small><p>UNKNOWN</p></div>`;
+      faceCamera.setStatus('Face not recognized', 'error');
       setTimeout(() => {
         navigate(() => createKioskDeniedScreen(response, mode));
       }, 1500);
@@ -149,7 +152,7 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   };
 
   const runDetection = async () => {
-    if (verifying || detecting) return;
+    if (resultLocked || verifying || detecting) return;
     detecting = true;
 
     try {
@@ -157,21 +160,58 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
 
       faceCamera.setFaceOverlay(result.primaryFace);
 
-      if (result.hasSingleForegroundFace && result.primaryFace) {
+      if (result.reasonCode === 'not-supported') {
         verifying = true;
+        faceCamera.setStatus('Detector unavailable, sending to API', 'warn');
+
         const snapshot = faceCamera.captureFrameJpeg(1080, 0.9);
         if (!snapshot) {
+          faceCamera.setStatus('Camera frame not ready', 'error');
           verifying = false;
           return;
         }
 
         const file = await dataUrlToJpegFile(snapshot);
-        const response = await verifyFace(file, 'verification');
+        const response = await verifyFace(file, 'temp_images');
+        resultLocked = true;
+
+        processMatch(response.similarity || 0, response, snapshot);
+        return;
+      }
+
+      if (result.reasonCode === 'multiple-faces') {
+        faceCamera.setStatus('Multiple faces detected', 'warn');
+        return;
+      }
+
+      if (result.reasonCode === 'face-out-of-zone') {
+        faceCamera.setStatus('Move closer and centre face', 'warn');
+      }
+
+      if (!result.detected || !result.primaryFace) {
+        faceCamera.setStatus('Align face with camera', 'warn');
+        return;
+      }
+
+      if (result.faceCount === 1) {
+        verifying = true;
+        faceCamera.setStatus('Sending to API', 'warn');
+        const snapshot = faceCamera.captureFrameJpeg(1080, 0.9);
+        if (!snapshot) {
+          faceCamera.setStatus('Camera frame not ready', 'error');
+          verifying = false;
+          return;
+        }
+
+        const file = await dataUrlToJpegFile(snapshot);
+        const response = await verifyFace(file, 'temp_images');
+        resultLocked = true;
 
         processMatch(response.similarity || 0, response, snapshot);
       }
     } catch (err) {
       console.error('Detection failed', err);
+      faceCamera.setStatus('Verification error', 'error');
       verifying = false;
     } finally {
       detecting = false;
@@ -182,6 +222,7 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     element: container,
     onShow: async () => {
       await faceCamera.start();
+      faceCamera.setStatus('Scanning face', 'warn');
       detectionTimer = setInterval(() => void runDetection(), 800);
     },
     onHide: () => {
