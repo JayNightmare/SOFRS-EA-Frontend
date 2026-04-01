@@ -6,7 +6,7 @@ import started from "electron-squirrel-startup";
 
 // Handle creating/removing shortcuts on Windows when installing/uninstalling.
 if (started) {
-  app.quit();
+	app.quit();
 }
 
 // Enable Chromium's FaceDetector API (Shape Detection) for renderer-side face detection.
@@ -18,7 +18,7 @@ console.log("App launched with --enable-experimental-web-platform-features flag 
 // Only disable if you hit GPU driver crashes on specific hardware.
 
 if (!app.isPackaged) {
-  app.commandLine.appendSwitch("no-sandbox");
+	app.commandLine.appendSwitch("no-sandbox");
 }
 
 const createWindow = () => {
@@ -132,86 +132,86 @@ let relayPort = 0;
 let relayServer: WebSocketServer | null = null;
 
 const startRelayServer = (): void => {
-  if (relayServer) return;
+	if (relayServer) return;
 
-  relayServer = new WebSocketServer({ port: 0, host: "0.0.0.0" });
+	relayServer = new WebSocketServer({ port: 0, host: "0.0.0.0" });
 
-  relayServer.on("listening", () => {
-    const addr = relayServer?.address();
-    if (addr && typeof addr === "object") {
-      relayPort = addr.port;
-      console.log(`Relay WebSocket server listening on port ${relayPort}`);
-    }
-  });
+	relayServer.on("listening", () => {
+		const addr = relayServer?.address();
+		if (addr && typeof addr === "object") {
+			relayPort = addr.port;
+			console.log(`Relay WebSocket server listening on port ${relayPort}`);
+		}
+	});
 
-  relayServer.on("connection", (socket: WebSocket) => {
-    console.log("Mobile device connected to relay.");
+	relayServer.on("connection", (socket: WebSocket) => {
+		console.log("Mobile device connected to relay.");
 
-    socket.on("message", (data: Buffer | string) => {
-      const payload = typeof data === "string" ? data : data.toString("utf-8");
+		socket.on("message", (data: Buffer | string) => {
+			const payload = typeof data === "string" ? data : data.toString("utf-8");
 
-      for (const win of BrowserWindow.getAllWindows()) {
-        win.webContents.send("relay:photo", payload);
-      }
+			for (const win of BrowserWindow.getAllWindows()) {
+				win.webContents.send("relay:photo", payload);
+			}
 
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.send(JSON.stringify({ status: "received" }));
-      }
-    });
+			if (socket.readyState === WebSocket.OPEN) {
+				socket.send(JSON.stringify({ status: "received" }));
+			}
+		});
 
-    socket.on("error", (err: Error) => {
-      console.error("Relay socket error:", err.message);
-    });
-  });
+		socket.on("error", (err: Error) => {
+			console.error("Relay socket error:", err.message);
+		});
+	});
 
-  relayServer.on("error", (err: Error) => {
-    console.error("Relay server error:", err.message);
-    relayServer = null;
-  });
+	relayServer.on("error", (err: Error) => {
+		console.error("Relay server error:", err.message);
+		relayServer = null;
+	});
 };
 
 const getLocalIpAddress = (): string => {
-  const interfaces = os.networkInterfaces();
-  for (const name of Object.keys(interfaces)) {
-    const entries = interfaces[name];
-    if (!entries) continue;
-    for (const entry of entries) {
-      if (entry.family === "IPv4" && !entry.internal) {
-        return entry.address;
-      }
-    }
-  }
-  return "127.0.0.1";
+	const interfaces = os.networkInterfaces();
+	for (const name of Object.keys(interfaces)) {
+		const entries = interfaces[name];
+		if (!entries) continue;
+		for (const entry of entries) {
+			if (entry.family === "IPv4" && !entry.internal) {
+				return entry.address;
+			}
+		}
+	}
+	return "127.0.0.1";
 };
 
 ipcMain.handle("relay:getPort", (): number => {
-  if (!relayServer) {
-    startRelayServer();
-  }
-  return relayPort;
+	if (!relayServer) {
+		startRelayServer();
+	}
+	return relayPort;
 });
 
 ipcMain.handle("relay:getLocalIp", (): string => {
-  return getLocalIpAddress();
+	return getLocalIpAddress();
 });
 
 app.on("ready", () => {
-  startRelayServer();
-  createWindow();
+	startRelayServer();
+	createWindow();
 });
 
 app.on("window-all-closed", () => {
-  if (relayServer) {
-    relayServer.close();
-    relayServer = null;
-  }
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+	if (relayServer) {
+		relayServer.close();
+		relayServer = null;
+	}
+	if (process.platform !== "darwin") {
+		app.quit();
+	}
 });
 
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
-    createWindow();
-  }
+	if (BrowserWindow.getAllWindows().length === 0) {
+		createWindow();
+	}
 });
