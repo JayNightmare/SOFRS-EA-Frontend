@@ -13,11 +13,11 @@ export type CameraPane = {
     start: () => Promise<void>;
     stop: () => void;
     setStatus: (label: string, tone?: StatusTone) => void;
-    captureFrameTensor: (targetSize?: number) => Float32Array | null;
     captureFrameJpeg: (targetSize?: number, quality?: number) => string | null;
     captureFrameBlob: (targetSize?: number, quality?: number) => Promise<Blob | null>;
     setFaceOverlay: (face: OverlayFaceBox | null) => void;
     getCameraAvailable: () => boolean;
+    getVideoElement: () => HTMLVideoElement;
 };
 
 const createStatusChip = (): HTMLSpanElement => {
@@ -118,8 +118,6 @@ export const createFacePane = (): CameraPane => {
             return false;
         }
 
-        console.log('Drawing video frame to canvas with target size:', targetSize);
-
         const sourceSize = Math.min(video.videoWidth, video.videoHeight);
         const sourceX = Math.floor((video.videoWidth - sourceSize) / 2);
         const sourceY = Math.floor((video.videoHeight - sourceSize) / 2);
@@ -138,30 +136,6 @@ export const createFacePane = (): CameraPane => {
             targetSize,
         );
         return true;
-    };
-
-    const captureFrameTensor = (targetSize = 640): Float32Array | null => {
-        if (!context) {
-            return null;
-        }
-
-        if (!drawSquareFrame(targetSize)) {
-            return null;
-        }
-
-        const imageData = context.getImageData(0, 0, targetSize, targetSize);
-        const pixelData = imageData.data;
-        const planeSize = targetSize * targetSize;
-        const tensor = new Float32Array(planeSize * 3);
-
-        for (let index = 0; index < planeSize; index += 1) {
-            const pixelOffset = index * 4;
-            tensor[index] = (pixelData[pixelOffset] ?? 0) / 255;
-            tensor[planeSize + index] = (pixelData[pixelOffset + 1] ?? 0) / 255;
-            tensor[(planeSize * 2) + index] = (pixelData[pixelOffset + 2] ?? 0) / 255;
-        }
-
-        return tensor;
     };
 
     const captureFrameJpeg = (targetSize = 640, quality = 0.88): string | null => {
@@ -208,16 +182,18 @@ export const createFacePane = (): CameraPane => {
 
     const getCameraAvailable = (): boolean => cameraAvailable;
 
+    const getVideoElement = (): HTMLVideoElement => video;
+
     return {
         element: frame,
         start,
         stop,
         setStatus,
-        captureFrameTensor,
         captureFrameJpeg,
         captureFrameBlob,
         setFaceOverlay,
         getCameraAvailable,
+        getVideoElement,
     };
 };
 
