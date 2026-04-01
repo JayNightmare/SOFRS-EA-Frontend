@@ -92,9 +92,14 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   liveLabel.className = 'panel-label';
   liveLabel.textContent = 'LIVE';
 
+  const liveCaptureImg = document.createElement('img');
+  liveCaptureImg.className = 'match-thumb live-capture-thumb';
+  liveCaptureImg.alt = 'Recently captured face';
+  liveCaptureImg.style.display = 'none';
+
   const livePanel = document.createElement('div');
   livePanel.className = 'video-panel';
-  livePanel.append(liveFrame, liveLabel);
+  livePanel.append(liveFrame, liveCaptureImg, liveLabel);
 
   // Match Panel
   const matchPanel = document.createElement('div');
@@ -200,6 +205,8 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   let detecting = false;
   let resultLocked = false;
   let lastResponse: VerifyFaceResponse | null = null;
+  let stableFaceFrames = 0;
+  let warmUntil = 0;
 
   const resetToAwaitingState = () => {
     lastResponse = null;
@@ -230,6 +237,101 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     return new File([blob], 'face.jpg', { type: 'image/jpeg' });
   };
 
+  const buildCleanPreviewFromSnapshot = async (
+    snapshotDataUrl: string,
+    targetSize = 1080,
+  ): Promise<string | null> => {
+    const image = await new Promise<HTMLImageElement | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = snapshotDataUrl;
+    });
+
+    if (!image?.naturalWidth || !image.naturalHeight) {
+      return snapshotDataUrl;
+    }
+
+    const sourceCanvas = document.createElement('canvas');
+    sourceCanvas.width = image.naturalWidth;
+    sourceCanvas.height = image.naturalHeight;
+    const sourceCtx = sourceCanvas.getContext('2d');
+
+    if (!sourceCtx) {
+      return snapshotDataUrl;
+    }
+
+    sourceCtx.drawImage(image, 0, 0);
+    const pixels = sourceCtx.getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+    const { data, width, height } = pixels;
+    const sampleStep = Math.max(1, Math.floor(height / 240));
+    const blackThreshold = 20;
+    const darkRatioThreshold = 0.985;
+
+    const isBlackEdgeColumn = (x: number): boolean => {
+      let darkCount = 0;
+      let count = 0;
+
+      for (let y = 0; y < height; y += sampleStep) {
+        const idx = (y * width + x) * 4;
+        const brightness = Math.max(data[idx] || 0, data[idx + 1] || 0, data[idx + 2] || 0);
+        if (brightness <= blackThreshold) {
+          darkCount += 1;
+        }
+        count += 1;
+      }
+
+      return count > 0 && darkCount / count >= darkRatioThreshold;
+    };
+
+    let left = 0;
+    let right = width - 1;
+
+    while (left < right && isBlackEdgeColumn(left)) left += 1;
+    while (right > left && isBlackEdgeColumn(right)) right -= 1;
+
+    const trimmedWidth = right - left + 1;
+    if (trimmedWidth <= 0) {
+      return snapshotDataUrl;
+    }
+
+    const cropWidth = trimmedWidth;
+    const cropHeight = height;
+    const squareSize = Math.min(cropWidth, cropHeight);
+    const squareX = left + (cropWidth - squareSize) / 2;
+    const squareY = (cropHeight - squareSize) / 2;
+
+    const outputCanvas = document.createElement('canvas');
+    outputCanvas.width = targetSize;
+    outputCanvas.height = targetSize;
+    const outputCtx = outputCanvas.getContext('2d');
+
+    if (!outputCtx) {
+      return snapshotDataUrl;
+    }
+
+    outputCtx.drawImage(
+      sourceCanvas,
+      squareX,
+      squareY,
+      squareSize,
+      squareSize,
+      0,
+      0,
+      targetSize,
+      targetSize,
+    );
+
+    return outputCanvas.toDataURL('image/jpeg', 0.92);
+  };
+
+  const freezeLivePanel = (snapshot: string) => {
+    liveCaptureImg.src = snapshot;
+    liveCaptureImg.style.display = 'block';
+    liveFrame.style.display = 'none';
+    liveLabel.textContent = 'CAPTURE';
+  };
+
   const processMatch = (similarityNum: number, response: VerifyFaceResponse, snapshot: string) => {
     const percent = Math.round(similarityNum * 100);
     matchPercent.textContent = `${percent}%`;
@@ -243,7 +345,7 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
 
     if (response.recognized) {
       lastResponse = response;
-      matchImg.src = snapshot;
+      matchImg.src = response.bestMatchImageDataUrl || snapshot;
       matchImg.style.display = 'block';
       btnConfirm.disabled = false;
       setScanFeedback('recognized', `Identity verified (${percent}%). Press confirm to continue.`, 'ok', 'FACIAL MATCH SIMILARITY', `${percent}%`);
@@ -276,6 +378,18 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     // detectionCycle += 1;
 
     try {
+      const video = faceCamera.getVideoElement();
+      if (
+        Date.now() < warmUntil ||
+        video.readyState < HTMLMediaElement.HAVE_ENOUGH_DATA ||
+        !video.videoWidth ||
+        !video.videoHeight
+      ) {
+        stableFaceFrames = 0;
+        faceCamera.setStatus('Initializing camera', 'warn');
+        return;
+      }
+
       const result = await detectFaces(faceCamera.getVideoElement());
 
       // const signature = `${result.reasonCode}:${result.faceCount}:${result.hasSingleForegroundFace}`;
@@ -296,90 +410,77 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       faceCamera.setFaceOverlay(result.primaryFace);
 
       if (result.reasonCode === 'not-supported') {
+        stableFaceFrames = 0;
         verifying = true;
         faceCamera.setStatus('Detector unavailable, sending to API', 'warn');
 
-        const snapshot = faceCamera.captureFrameJpeg(1080, 0.9);
-        if (!snapshot) {
+        const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
+        if (!rawSnapshot) {
           faceCamera.setStatus('Camera frame not ready', 'error');
           verifying = false;
           return;
         }
 
-        const file = await dataUrlToJpegFile(snapshot);
+        const displaySnapshot = await buildCleanPreviewFromSnapshot(rawSnapshot) || rawSnapshot;
+        freezeLivePanel(displaySnapshot);
+        const file = await dataUrlToJpegFile(rawSnapshot);
         const response = await verifyFace(file, 'temp_images');
         resultLocked = true;
 
-        processMatch(response.similarity || 0, response, snapshot);
+        processMatch(response.similarity || 0, response, rawSnapshot);
         return;
       }
 
       if (result.reasonCode === 'multiple-faces') {
-        resetToAwaitingState();
-        setScanFeedback('multiple-faces', result.message, 'error', 'MULTIPLE FACES', '2+');
+        stableFaceFrames = 0;
+        faceCamera.setStatus('Multiple faces detected', 'warn');
         return;
       }
 
       if (result.reasonCode === 'face-out-of-zone') {
-        resetToAwaitingState();
+        stableFaceFrames = 0;
+        faceCamera.setStatus('Move closer and centre face', 'warn');
+      }
 
-        if (result.message.toLowerCase().includes('too close')) {
-          setScanFeedback('too-close', result.message, 'warn', 'TOO CLOSE', 'MOVE BACK');
-          return;
-        }
-
-        if (result.message.toLowerCase().includes('closer')) {
-          setScanFeedback('too-far', result.message, 'warn', 'TOO FAR', 'MOVE CLOSER');
-          return;
-        }
-
-        setScanFeedback('off-center', result.message, 'warn', 'OFF CENTER', 'ALIGN FACE');
+      if (!result.detected || !result.primaryFace) {
+        stableFaceFrames = 0;
+        faceCamera.setStatus('Align face with camera', 'warn');
         return;
       }
 
-      if (!result.detected) {
-        resetToAwaitingState();
-        setScanFeedback('no-face', 'No face detected. Align your face with the camera guide.', 'warn', 'NO FACE', '--%');
+      if (!result.hasSingleForegroundFace) {
+        stableFaceFrames = 0;
+        faceCamera.setStatus('Center one clear face in view', 'warn');
         return;
       }
 
-      if (result.hasSingleForegroundFace && result.primaryFace) {
+      stableFaceFrames += 1;
+      if (stableFaceFrames < 2) {
+        faceCamera.setStatus('Hold still for capture', 'warn');
+        return;
+      }
+
+      if (result.faceCount === 1) {
         verifying = true;
-        setScanFeedback('verifying', 'Face detected. Verifying identity...', 'ok', 'VERIFYING IDENTITY', '...');
-        const snapshot = faceCamera.captureFrameJpeg(1080, 0.9);
-        if (!snapshot) {
-          // verifying = false;
-          setScanFeedback('capture-failed', 'Unable to capture camera frame. Please rescan.', 'error', 'CAPTURE FAILED', 'ERR');
+        faceCamera.setStatus('Sending to API', 'warn');
+        const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
+        if (!rawSnapshot) {
+          faceCamera.setStatus('Camera frame not ready', 'error');
+          verifying = false;
           return;
         }
 
-        logInfo('Submitting verification request', {
-          // cycle: detectionCycle,
-          databasePath: 'verification',
-          primaryFace: summarizeFace(result.primaryFace),
-        });
-        const file = await dataUrlToJpegFile(snapshot);
-        const response = await verifyFace(file, 'verification');
+        const displaySnapshot = await buildCleanPreviewFromSnapshot(rawSnapshot) || rawSnapshot;
+        freezeLivePanel(displaySnapshot);
+        const file = await dataUrlToJpegFile(rawSnapshot);
+        const response = await verifyFace(file, 'temp_images');
+        resultLocked = true;
 
-        processMatch(response.similarity || 0, response, snapshot);
+        processMatch(response.similarity || 0, response, rawSnapshot);
       }
     } catch (err) {
-      const errorPayload = buildErrorPayload(err);
-      const errorSignature = `${errorPayload.name ?? 'Error'}:${errorPayload.message ?? JSON.stringify(errorPayload)}`;
-      const now = Date.now();
-
-      if (errorSignature !== lastErrorSignature || now - lastErrorLoggedAt >= 4000) {
-        logError('Detection loop failed', {
-          // cycle: detectionCycle,
-          verifying,
-          detecting,
-          ...errorPayload,
-        });
-        lastErrorSignature = errorSignature;
-        lastErrorLoggedAt = now;
-      }
-
-      setScanFeedback('scan-error', 'Scan error. Please rescan and try again.', 'error', 'SCAN ERROR', 'ERR');
+      console.error('Detection failed', err);
+      faceCamera.setStatus('Verification error', 'error');
       verifying = false;
     } finally {
       detecting = false;
@@ -391,8 +492,9 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     onShow: async () => {
       logInfo('Scan screen mounted');
       await faceCamera.start();
-      resetToAwaitingState();
-      setScanFeedback('initializing', 'Camera ready. Position your face in the center guide.', 'warn', 'LOOKING FOR FACE', '--%');
+      warmUntil = Date.now() + 1500;
+      stableFaceFrames = 0;
+      faceCamera.setStatus('Scanning face', 'warn');
       detectionTimer = setInterval(() => void runDetection(), 800);
     },
     onHide: () => {

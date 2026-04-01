@@ -1,6 +1,12 @@
 const BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:8000';
 const API_KEY = process.env.EXPO_PUBLIC_API_KEY ?? '';
 
+export interface UploadImageFile {
+  uri: string;
+  name: string;
+  type: string;
+}
+
 function getHeaders(): Record<string, string> {
   return {
     'X-API-Key': API_KEY,
@@ -120,12 +126,12 @@ export async function searchImage(imageBlob: Blob): Promise<ImageSearchResponse>
 
 export async function uploadImages(
   ownerId: string,
-  files: Blob[],
+  files: UploadImageFile[],
 ): Promise<{ owner_id: string; owner_type: string; uploaded: string[] }> {
   const form = new FormData();
   form.append('owner_id', ownerId);
   for (let i = 0; i < files.length; i++) {
-    form.append('files', files[i], `face_${i}.jpg`);
+    form.append('files', files[i] as unknown as Blob);
   }
   const res = await fetch(`${BASE_URL}/image/upload`, {
     method: 'POST',

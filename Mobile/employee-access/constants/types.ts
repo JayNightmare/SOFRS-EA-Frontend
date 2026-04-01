@@ -33,5 +33,12 @@ export interface UserData {
   phone?: string;
 }
 
-/** Stores base64-encoded JPEG strings keyed by position. */
-export type FaceScanResult = Partial<Record<FaceCapturePosition, string>>;
+/** One captured face image produced by the mobile camera flow. */
+export interface FaceCaptureAsset {
+  uri?: string;
+  base64?: string;
+  simulated?: boolean;
+}
+
+/** Stores captured face images keyed by position. */
+export type FaceScanResult = Partial<Record<FaceCapturePosition, FaceCaptureAsset>>;

@@ -11,6 +11,7 @@ export type EmployeeRecord = {
     name?: string;
     department?: string;
     title?: string;
+    ownerType?: string;
     [key: string]: unknown;
 };
 
@@ -24,21 +25,39 @@ export type VerifyFaceResponse = {
     employee: EmployeeRecord | null;
     similarity: number;
     reasonCode: VerificationReasonCode;
+    bestMatchImageDataUrl: string | null;
 };
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/+$/, "");
-const API_KEY = import.meta.env.VITE_API_KEY ?? "";
+const DEFAULT_API_BASE_URL = "http://127.0.0.1:8000";
+const VERIFY_PATH = "/image/search";
+const HEALTH_PATH = "/health";
+
+const getConfiguredValue = (value?: string): string | null => {
+    if (!value) {
+        return null;
+    }
+
+    const trimmed = value.trim();
+    return trimmed.length > 0 ? trimmed : null;
+};
+
+const getApiBaseUrl = (): string =>
+    getConfiguredValue(import.meta.env.VITE_API_BASE_URL) ??
+    DEFAULT_API_BASE_URL;
 
 const getVerifyEndpoint = (): string => {
-    const endpoint = `${API_BASE_URL}/image/search`;
+    const explicitEndpoint = getConfiguredValue(import.meta.env.VITE_VERIFY_ENDPOINT);
+    if (explicitEndpoint) {
+        return explicitEndpoint;
+    }
 
-    return endpoint;
+    return new URL(VERIFY_PATH, getApiBaseUrl()).toString();
 };
 
 // Send a Health Check to the API to verify it's reachable and responding correctly
 export const checkApiHealth = async (): Promise<boolean> => {
     try {
-        const response = await fetch(`${API_BASE_URL}/health`, {
+        const response = await fetch(new URL(HEALTH_PATH, getApiBaseUrl()).toString(), {
             method: 'GET',
             headers: {
                 'X-API-Key': API_KEY,
@@ -67,7 +86,10 @@ const toNumber = (value: unknown): number => {
     return value;
 };
 
-const normalizePersonRecord = (value: unknown): EmployeeRecord | null => {
+const normalizePersonRecord = (
+    value: unknown,
+    ownerType?: string,
+): EmployeeRecord | null => {
     if (!value || typeof value !== "object") {
         return null;
     }
@@ -88,6 +110,7 @@ const normalizePersonRecord = (value: unknown): EmployeeRecord | null => {
                 : typeof source.fullName === "string"
                     ? source.fullName
                     : undefined,
+        ownerType,
     };
 };
 
@@ -118,6 +141,15 @@ const looksRecognizedMessage = (value: unknown): boolean => {
     );
 };
 
+const extractImageDataUrl = (value: unknown): string | null => {
+    if (!value || typeof value !== "object") {
+        return null;
+    }
+
+    const source = value as Record<string, unknown>;
+    return typeof source.data_url === "string" ? source.data_url : null;
+};
+
 const mapResponse = (payload: unknown): VerifyFaceResponse => {
     if (!payload || typeof payload !== "object") {
         return {
@@ -126,15 +158,31 @@ const mapResponse = (payload: unknown): VerifyFaceResponse => {
             employee: null,
             similarity: 0,
             reasonCode: "service-error",
+            bestMatchImageDataUrl: null,
         };
     }
 
     const source = payload as Record<string, unknown>;
+    const matchedIdentity =
+        source.matched_identity && typeof source.matched_identity === "object"
+            ? source.matched_identity as Record<string, unknown>
+            : null;
+    const ownerType =
+        matchedIdentity && typeof matchedIdentity.owner_type === "string"
+            ? matchedIdentity.owner_type
+            : source.employee
+                ? "employee"
+                : source.visitor
+                    ? "visitor"
+                    : undefined;
     const message =
         typeof source.message === "string"
             ? source.message
             : "Verification service returned an invalid response.";
-    const employee = normalizePersonRecord(source.employee ?? source.visitor);
+    const employee = normalizePersonRecord(
+        source.employee ?? source.visitor,
+        ownerType,
+    );
     const rawSimilarity = toNumber(source.similarity);
     const explicitRecognized = source.recognized;
     const inferredRecognized =
@@ -153,6 +201,10 @@ const mapResponse = (payload: unknown): VerifyFaceResponse => {
             : recognized
                 ? "ok"
                 : "unknown-person";
+    const bestMatchImageDataUrl =
+        extractImageDataUrl(source.best_match_image) ??
+        extractImageDataUrl(source.bestMatchImage) ??
+        extractImageDataUrl(source.matched_image);
 
     return {
         recognized,
@@ -165,6 +217,7 @@ const mapResponse = (payload: unknown): VerifyFaceResponse => {
         employee,
         similarity,
         reasonCode,
+        bestMatchImageDataUrl,
     };
 };
 
@@ -173,6 +226,7 @@ export const verifyFace = async (
     databasePath = "temp_images",
     signal?: AbortSignal,
 ): Promise<VerifyFaceResponse> => {
+    const endpoint = getVerifyEndpoint();
     const formData = new FormData();
     formData.append("image", file);
     formData.append("database_path", databasePath);
