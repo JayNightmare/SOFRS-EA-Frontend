@@ -2,7 +2,7 @@ import { createFacePane } from '../components/face';
 import { verifyFace } from '../services/verification';
 import { detectFaces, FaceDetectionResult } from '../services/face-detector';
 import type { VerifyFaceResponse, EmployeeRecord } from '../services/verification';
-import { resolveMobileSetupUrl } from '../services/settings';
+import { resolveMobileSetupLinks } from '../services/settings';
 
 type MainScreenView = {
     element: HTMLElement;
@@ -26,8 +26,8 @@ type Stage =
 
 const ENROLLMENT_POSES = ['Front', 'Left', 'Right', 'Up', 'Down'];
 
-const getMobileSetupUrl = (): string => {
-    return resolveMobileSetupUrl();
+const getMobileSetupLinks = () => {
+    return resolveMobileSetupLinks();
 };
 
 const getToneFromStage = (stage: Stage): StatusTone => {
@@ -524,7 +524,7 @@ export const createMainScreenPage = (): MainScreenView => {
                 window.relay.getLocalIp(),
             ]);
 
-            const relayUrl = `sofrs://relay-capture?ws=${localIp}:${port}`;
+            const relayUrl = `employeeaccess://relay-capture?ws=${localIp}:${port}`;
             noCameraQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(relayUrl)}`;
             noCameraCopy.textContent = `Scan this QR code with the SOFRS mobile app. Relay server at ${localIp}:${port}`;
 
@@ -573,11 +573,11 @@ export const createMainScreenPage = (): MainScreenView => {
             return;
         }
 
-        const setupUrl = getMobileSetupUrl();
-        mobileQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(setupUrl)}`;
-        mobileCopy.textContent = 'Scan this QR with your phone to continue FaceID setup in the mobile app.';
-        mobileLink.href = setupUrl;
-        mobileLink.textContent = setupUrl;
+        const { qrUrl, fallbackUrl } = getMobileSetupLinks();
+        mobileQr.src = `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(qrUrl)}`;
+        mobileCopy.textContent = 'Scan this QR with your phone to continue FaceID setup in the mobile app. If it does not open, use the fallback link below.';
+        mobileLink.href = fallbackUrl;
+        mobileLink.textContent = fallbackUrl;
         mobilePanel.style.display = 'grid';
     };
 
