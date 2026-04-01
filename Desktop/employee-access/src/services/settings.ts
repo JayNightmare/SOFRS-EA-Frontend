@@ -9,6 +9,8 @@ export type AppSettings = {
 };
 
 const SETTINGS_STORAGE_KEY = "sofrs.desktop.settings.v1";
+const DEFAULT_MOBILE_SETUP_DEEPLINK = "employeeaccess://face-setup";
+const DEFAULT_MOBILE_SETUP_FALLBACK_URL = "https://sofrs-mobile.local/face-setup";
 
 const DEFAULT_APP_SETTINGS: AppSettings = {
     musicEnabled: true,
@@ -16,7 +18,7 @@ const DEFAULT_APP_SETTINGS: AppSettings = {
     minimumCameraWidth: 1280,
     minimumCameraHeight: 720,
     minimumCameraFps: 24,
-    mobileSetupUrl: "https://sofrs-mobile.local/face-setup",
+    mobileSetupUrl: DEFAULT_MOBILE_SETUP_FALLBACK_URL,
     transitionLoaderMs: 320,
 };
 
@@ -163,15 +165,71 @@ export const subscribeToSettings = (
     };
 };
 
-export const resolveMobileSetupUrl = (): string => {
-    if (currentSettings.mobileSetupUrl.trim().length > 0) {
-        return currentSettings.mobileSetupUrl;
-    }
+const getUserConfiguredMobileSetupUrl = (): string =>
+    currentSettings.mobileSetupUrl.trim();
 
+const getEnvMobileSetupUrl = (): string => {
     const envUrl = import.meta.env.VITE_MOBILE_SETUP_URL;
-    if (envUrl && envUrl.trim().length > 0) {
-        return envUrl.trim();
+    return envUrl ? envUrl.trim() : "";
+};
+
+const isAppDeepLink = (value: string): boolean =>
+    /^(employeeaccess|sofrs):\/\//i.test(value);
+
+const isWebUrl = (value: string): boolean => /^https?:\/\//i.test(value);
+
+const resolveConfiguredMobileSetupUrl = (): string => {
+    const userConfiguredUrl = getUserConfiguredMobileSetupUrl();
+    if (userConfiguredUrl.length > 0) {
+        return userConfiguredUrl;
     }
 
-    return DEFAULT_APP_SETTINGS.mobileSetupUrl;
+    const envUrl = getEnvMobileSetupUrl();
+    if (envUrl.length > 0) {
+        return envUrl;
+    }
+
+    return DEFAULT_MOBILE_SETUP_FALLBACK_URL;
+};
+
+const resolveWebFallbackUrl = (): string => {
+    const candidates = [
+        getUserConfiguredMobileSetupUrl(),
+        getEnvMobileSetupUrl(),
+        DEFAULT_MOBILE_SETUP_FALLBACK_URL,
+    ];
+
+    const firstWebUrl = candidates.find((candidate) => isWebUrl(candidate));
+    return firstWebUrl ?? DEFAULT_MOBILE_SETUP_FALLBACK_URL;
+};
+
+export type MobileSetupLinks = {
+    qrUrl: string;
+    fallbackUrl: string;
+};
+
+export const resolveMobileSetupLinks = (): MobileSetupLinks => {
+    const configuredUrl = resolveConfiguredMobileSetupUrl();
+
+    if (isAppDeepLink(configuredUrl)) {
+        return {
+            qrUrl: configuredUrl,
+            fallbackUrl: resolveWebFallbackUrl(),
+        };
+    }
+
+    return {
+        qrUrl: DEFAULT_MOBILE_SETUP_DEEPLINK,
+        fallbackUrl: isWebUrl(configuredUrl)
+            ? configuredUrl
+            : DEFAULT_MOBILE_SETUP_FALLBACK_URL,
+    };
+};
+
+export const resolveMobileSetupUrl = (): string => {
+    return resolveMobileSetupLinks().qrUrl;
+};
+
+export const resolveMobileSetupFallbackUrl = (): string => {
+    return resolveMobileSetupLinks().fallbackUrl;
 };

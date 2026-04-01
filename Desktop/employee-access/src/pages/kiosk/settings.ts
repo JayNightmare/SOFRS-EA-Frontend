@@ -5,7 +5,7 @@ import {
     getAppSettings,
     getDefaultAppSettings,
     resetAppSettings,
-    resolveMobileSetupUrl,
+    resolveMobileSetupFallbackUrl,
     updateAppSettings,
 } from "../../services/settings";
 
@@ -161,7 +161,7 @@ const resolveRelayDeeplink = async (): Promise<string | null> => {
             return null;
         }
 
-        return `sofrs://relay-capture?ws=${localIp}:${port}`;
+        return `employeeaccess://relay-capture?ws=${localIp}:${port}`;
     } catch {
         return null;
     }
@@ -412,7 +412,7 @@ export const createKioskSettingsScreen = (): View => {
 
         if (!diagnostics.passed) {
             const relayDeeplink = await resolveRelayDeeplink();
-            const fallbackUrl = setupUrlInput.value.trim() || resolveMobileSetupUrl();
+            const fallbackUrl = setupUrlInput.value.trim() || resolveMobileSetupFallbackUrl();
             const deeplink = relayDeeplink ?? fallbackUrl;
             const label = relayDeeplink
                 ? "Deep link ready for mobile relay capture:"
