@@ -51,17 +51,16 @@ const isForeground = (face: DetectedFace): boolean => {
 	const aspectRatio = face.width / Math.max(face.height, 0.0001);
 	const cx = face.x + face.width / 2;
 	const cy = face.y + face.height / 2;
-	const inZone = cx >= 0.18 && cx <= 0.82 && cy >= 0.15 && cy <= 0.85;
-	const plausibleShape = aspectRatio >= 0.7 && aspectRatio <= 1.35;
-	const plausibleSize = area >= 0.06 && face.width >= 0.18 && face.height >= 0.18;
-	return plausibleSize && plausibleShape && inZone;
+	// const inZone = cx >= 0.18 && cx <= 0.82 && cy >= 0.15 && cy <= 0.85;
 	const inZone =
 		cx >= MIN_CENTER_X &&
 		cx <= MAX_CENTER_X &&
 		cy >= MIN_CENTER_Y &&
 		cy <= MAX_CENTER_Y;
 	const inSizeRange = area >= MIN_FACE_AREA && area <= MAX_FACE_AREA;
-	return inSizeRange && inZone;
+	const plausibleShape = aspectRatio >= 0.7 && aspectRatio <= 1.35;
+	const plausibleSize = area >= 0.06 && face.width >= 0.18 && face.height >= 0.18;
+	return plausibleSize && plausibleShape && inSizeRange && inZone;
 };
 
 const getOutOfZoneMessage = (face: DetectedFace): string => {

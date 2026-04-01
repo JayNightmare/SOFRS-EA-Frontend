@@ -7,37 +7,37 @@ import { detectFaces } from '../../services/face-detector';
 import { createKioskIdleScreen } from './idle';
 import { createKioskApprovedScreen } from './approved';
 import { createKioskDeniedScreen } from './denied';
-import type { DetectedFace } from '../../services/face-detector';
+// import type { DetectedFace } from '../../services/face-detector';
 
 type ScanFeedbackTone = 'ok' | 'warn' | 'error';
 
 type LogPayload = Record<string, unknown>;
 
-const buildErrorPayload = (error: unknown): LogPayload => {
-  if (error instanceof Error) {
-    return {
-      name: error.name,
-      message: error.message,
-      stack: error.stack,
-    };
-  }
+// const buildErrorPayload = (error: unknown): LogPayload => {
+//   if (error instanceof Error) {
+//     return {
+//       name: error.name,
+//       message: error.message,
+//       stack: error.stack,
+//     };
+//   }
 
-  return { value: error };
-};
+//   return { value: error };
+// };
 
-const summarizeFace = (face: DetectedFace | null): LogPayload | null => {
-  if (!face) {
-    return null;
-  }
+// const summarizeFace = (face: DetectedFace | null): LogPayload | null => {
+//   if (!face) {
+//     return null;
+//   }
 
-  return {
-    x: Number(face.x.toFixed(3)),
-    y: Number(face.y.toFixed(3)),
-    width: Number(face.width.toFixed(3)),
-    height: Number(face.height.toFixed(3)),
-    confidence: Number(face.confidence.toFixed(3)),
-  };
-};
+//   return {
+//     x: Number(face.x.toFixed(3)),
+//     y: Number(face.y.toFixed(3)),
+//     width: Number(face.width.toFixed(3)),
+//     height: Number(face.height.toFixed(3)),
+//     confidence: Number(face.confidence.toFixed(3)),
+//   };
+// };
 
 export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   const logPrefix = `[kiosk-scan:${mode}]`;
@@ -57,13 +57,13 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     console.warn(`${logPrefix} ${message}`);
   };
 
-  const logError = (message: string, payload?: LogPayload) => {
-    if (payload) {
-      console.error(`${logPrefix} ${message}`, payload);
-      return;
-    }
-    console.error(`${logPrefix} ${message}`);
-  };
+  // const logError = (message: string, payload?: LogPayload) => {
+  //   if (payload) {
+  //     console.error(`${logPrefix} ${message}`, payload);
+  //     return;
+  //   }
+  //   console.error(`${logPrefix} ${message}`);
+  // };
 
   const { container, main } = createKioskLayoutShell(mode, {
     showSystemStatus: true,
@@ -99,7 +99,7 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
 
   const livePanel = document.createElement('div');
   livePanel.className = 'video-panel';
-  livePanel.append(liveFrame, liveCaptureImg, liveLabel);
+  livePanel.append(liveFrame, liveCaptureImg);
 
   // Match Panel
   const matchPanel = document.createElement('div');
@@ -132,8 +132,8 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   let lastFeedbackKey = '';
   // let detectionCycle = 0;
   // let lastDetectionSignature = '';
-  let lastErrorSignature = '';
-  let lastErrorLoggedAt = 0;
+  // let lastErrorSignature = '';
+  // let lastErrorLoggedAt = 0;
 
   const setScanFeedback = (
     key: string,
@@ -208,14 +208,14 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   let stableFaceFrames = 0;
   let warmUntil = 0;
 
-  const resetToAwaitingState = () => {
-    lastResponse = null;
-    btnConfirm.disabled = true;
-    matchImg.style.display = 'none';
-    tokenInfo.innerHTML = defaultTokenHtml;
-    timeInfo.innerHTML = defaultTimeHtml;
-    logInfo('Reset to awaiting state');
-  };
+  // const resetToAwaitingState = () => {
+  //   lastResponse = null;
+  //   btnConfirm.disabled = true;
+  //   matchImg.style.display = 'none';
+  //   tokenInfo.innerHTML = defaultTokenHtml;
+  //   timeInfo.innerHTML = defaultTimeHtml;
+  //   logInfo('Reset to awaiting state');
+  // };
 
   btnConfirm.addEventListener('click', () => {
     if (lastResponse) {
@@ -391,20 +391,6 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       }
 
       const result = await detectFaces(faceCamera.getVideoElement());
-
-      // const signature = `${result.reasonCode}:${result.faceCount}:${result.hasSingleForegroundFace}`;
-      // if (signature !== lastDetectionSignature || detectionCycle % 30 === 0) {
-      //   logInfo('Detection result', {
-      //     cycle: detectionCycle,
-      //     reasonCode: result.reasonCode,
-      //     message: result.message,
-      //     detected: result.detected,
-      //     faceCount: result.faceCount,
-      //     hasSingleForegroundFace: result.hasSingleForegroundFace,
-      //     primaryFace: summarizeFace(result.primaryFace),
-      //   });
-      //   lastDetectionSignature = signature;
-      // }
 
       console.log('Detecting Face');
       faceCamera.setFaceOverlay(result.primaryFace);

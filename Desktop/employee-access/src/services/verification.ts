@@ -54,6 +54,8 @@ const getVerifyEndpoint = (): string => {
     return new URL(VERIFY_PATH, getApiBaseUrl()).toString();
 };
 
+const API_KEY = getConfiguredValue(import.meta.env.VITE_API_KEY) ?? "";
+
 // Send a Health Check to the API to verify it's reachable and responding correctly
 export const checkApiHealth = async (): Promise<boolean> => {
     try {
@@ -231,7 +233,7 @@ export const verifyFace = async (
     formData.append("image", file);
     formData.append("database_path", databasePath);
 
-    const endpoint = getVerifyEndpoint();
+    // const endpoint = getVerifyEndpoint();
     const startedAt = performance.now();
     console.log("[verification] Sending request", {
         endpoint,
