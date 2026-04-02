@@ -17,6 +17,8 @@ This repo will be for the Smart Office Face Recognition System for Employee Acce
 
 ## Project Structure
 
+<img width="3048" height="3880" alt="diagram" src="https://github.com/user-attachments/assets/24182b38-4678-49dc-a9c1-cd22f5ef0302" />
+
 This repository contains the following main components:
 
 - **`Desktop/employee-access/`**: The Electron and Vite-based desktop application for employee access management.
