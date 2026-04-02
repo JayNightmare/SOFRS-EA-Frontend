@@ -108,10 +108,35 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   matchImg.className = 'match-thumb';
   matchImg.alt = 'Matched face';
   matchImg.style.display = 'none';
+  const matchPending = document.createElement('div');
+  matchPending.className = 'match-pending';
+  const matchPendingSpinner = document.createElement('div');
+  matchPendingSpinner.className = 'match-pending-spinner';
+  const matchPendingTitle = document.createElement('span');
+  matchPendingTitle.className = 'match-pending-title';
+  matchPendingTitle.textContent = 'Verifying';
+  const matchPendingCopy = document.createElement('span');
+  matchPendingCopy.className = 'match-pending-copy';
+  matchPendingCopy.textContent = 'Comparing against enrolled faces';
+  const matchPendingProgress = document.createElement('div');
+  matchPendingProgress.className = 'match-pending-progress';
+  const matchPendingProgressFill = document.createElement('div');
+  matchPendingProgressFill.className = 'match-pending-progress-fill';
+  matchPendingProgress.append(matchPendingProgressFill);
+  const matchPendingProgressValue = document.createElement('span');
+  matchPendingProgressValue.className = 'match-pending-progress-value';
+  matchPendingProgressValue.textContent = '0%';
+  matchPending.append(
+    matchPendingSpinner,
+    matchPendingTitle,
+    matchPendingCopy,
+    matchPendingProgress,
+    matchPendingProgressValue,
+  );
   const matchLabel = document.createElement('span');
   matchLabel.className = 'panel-label';
   matchLabel.textContent = 'MATCH';
-  matchPanel.append(matchImg, matchLabel);
+  matchPanel.append(matchImg, matchPending, matchLabel);
 
   panelsGroup.append(livePanel, matchPanel);
 
@@ -207,6 +232,9 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   let lastResponse: VerifyFaceResponse | null = null;
   let stableFaceFrames = 0;
   let warmUntil = 0;
+  let verifyProgressTimer: ReturnType<typeof setInterval> | null = null;
+  let verifyProgressValue = 0;
+  let verifyProgressStartedAt = 0;
 
   // const resetToAwaitingState = () => {
   //   lastResponse = null;
@@ -235,6 +263,71 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   const dataUrlToJpegFile = async (dataUrl: string): Promise<File> => {
     const blob = await fetch(dataUrl).then((r) => r.blob());
     return new File([blob], 'face.jpg', { type: 'image/jpeg' });
+  };
+
+  const setMatchPendingProgressValue = (value: number) => {
+    const bounded = Math.max(0, Math.min(100, value));
+    verifyProgressValue = bounded;
+    matchPendingProgressFill.style.width = `${bounded.toFixed(1)}%`;
+    matchPendingProgressValue.textContent = `${Math.round(bounded)}%`;
+  };
+
+  const stopMatchPendingProgress = (finalValue?: number) => {
+    if (verifyProgressTimer) {
+      clearInterval(verifyProgressTimer);
+      verifyProgressTimer = null;
+    }
+
+    if (typeof finalValue === 'number') {
+      setMatchPendingProgressValue(finalValue);
+    }
+  };
+
+  const setMatchPanelIdle = () => {
+    stopMatchPendingProgress(0);
+    matchImg.style.display = 'none';
+    matchPending.dataset.state = 'idle';
+    matchPendingTitle.textContent = 'Awaiting scan';
+    matchPendingCopy.textContent = 'The closest enrolled face will appear here';
+    matchPendingProgressValue.textContent = 'READY';
+  };
+
+  const setMatchPanelVerifying = () => {
+    stopMatchPendingProgress(10);
+    matchImg.style.display = 'none';
+    matchPending.dataset.state = 'verifying';
+    matchPendingTitle.textContent = 'Verifying';
+    matchPendingCopy.textContent = 'Comparing against enrolled faces';
+    verifyProgressStartedAt = performance.now();
+    verifyProgressTimer = setInterval(() => {
+      const elapsedSeconds = (performance.now() - verifyProgressStartedAt) / 1000;
+      const target = 10 + (84 * (1 - Math.exp(-elapsedSeconds / 4.2)));
+      const nextValue = verifyProgressValue + ((target - verifyProgressValue) * 0.22);
+      setMatchPendingProgressValue(nextValue);
+
+      if (elapsedSeconds > 6) {
+        matchPendingCopy.textContent = 'Still verifying. This can take a few seconds';
+      }
+      if (elapsedSeconds > 12) {
+        matchPendingCopy.textContent = 'Final checks are running. Waiting for response';
+      }
+    }, 140);
+  };
+
+  const setMatchPanelResult = (imageUrl: string) => {
+    stopMatchPendingProgress(100);
+    matchImg.src = imageUrl;
+    matchImg.style.display = 'block';
+    matchPending.dataset.state = 'hidden';
+  };
+
+  const setMatchPanelManualRescan = (title: string, copy: string) => {
+    stopMatchPendingProgress(0);
+    matchImg.style.display = 'none';
+    matchPending.dataset.state = 'manual-rescan';
+    matchPendingTitle.textContent = title;
+    matchPendingCopy.textContent = copy;
+    matchPendingProgressValue.textContent = 'RESCAN';
   };
 
   const buildCleanPreviewFromSnapshot = async (
@@ -332,6 +425,25 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     liveLabel.textContent = 'CAPTURE';
   };
 
+  const lockForManualRescan = (statusText: string, title: string, copy: string) => {
+    resultLocked = true;
+    verifying = false;
+    btnConfirm.disabled = true;
+    lastResponse = null;
+    matchBox.dataset.tone = 'warn';
+    matchTag.textContent = 'MANUAL RESCAN REQUIRED';
+    matchPercent.textContent = 'RETRY';
+    tokenInfo.innerHTML = defaultTokenHtml;
+    timeInfo.innerHTML = defaultTimeHtml;
+    faceCamera.setStatus(statusText, 'error');
+    setMatchPanelManualRescan(title, copy);
+    logWarn('Scan locked pending manual rescan', {
+      statusText,
+      title,
+      copy,
+    });
+  };
+
   const processMatch = (similarityNum: number, response: VerifyFaceResponse, snapshot: string) => {
     const percent = Math.round(similarityNum * 100);
     matchPercent.textContent = `${percent}%`;
@@ -345,8 +457,7 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
 
     if (response.recognized) {
       lastResponse = response;
-      matchImg.src = response.bestMatchImageDataUrl || snapshot;
-      matchImg.style.display = 'block';
+      setMatchPanelResult(response.bestMatchImageDataUrl || snapshot);
       btnConfirm.disabled = false;
       setScanFeedback('recognized', `Identity verified (${percent}%). Press confirm to continue.`, 'ok', 'FACIAL MATCH SIMILARITY', `${percent}%`);
 
@@ -355,11 +466,23 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       timeInfo.innerHTML = `<span class="icon">${svgIconHtml('clock')}</span><div><small>TIMESTAMP</small><p>${new Date().toLocaleTimeString()}</p></div>`;
       faceCamera.setStatus('Identity verified. Press confirm to continue.', 'ok');
     } else {
+      if (response.reasonCode === 'no-face' || response.reasonCode === 'service-error') {
+        const rescanMessage = response.reasonCode === 'no-face'
+          ? 'No face detected in the captured image. Press rescan to try again.'
+          : 'Could not reach the verification API. Press rescan to try again.';
+        lockForManualRescan(
+          rescanMessage,
+          'Manual rescan required',
+          rescanMessage,
+        );
+        return;
+      }
+
       faceCamera.setStatus('Face not recognized. Redirecting...', 'error');
       matchBox.dataset.tone = 'error';
       matchTag.textContent = 'MATCH FAILED';
       matchPercent.textContent = 'FAIL';
-      matchImg.style.display = 'none';
+      setMatchPanelIdle();
       tokenInfo.innerHTML = `<span class="icon">${svgIconHtml('fingerprint')}</span><div><small>TOKEN ID</small><p>UNKNOWN</p></div>`;
       faceCamera.setStatus('Face not recognized. Redirecting...', 'error');
       setTimeout(() => {
@@ -399,10 +522,12 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
         stableFaceFrames = 0;
         verifying = true;
         faceCamera.setStatus('Detector unavailable, sending to API', 'warn');
+        setMatchPanelVerifying();
 
         const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
         if (!rawSnapshot) {
           faceCamera.setStatus('Camera frame not ready', 'error');
+          setMatchPanelIdle();
           verifying = false;
           return;
         }
@@ -449,9 +574,11 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       if (result.faceCount === 1) {
         verifying = true;
         faceCamera.setStatus('Sending to API', 'warn');
+        setMatchPanelVerifying();
         const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
         if (!rawSnapshot) {
           faceCamera.setStatus('Camera frame not ready', 'error');
+          setMatchPanelIdle();
           verifying = false;
           return;
         }
@@ -466,7 +593,11 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       }
     } catch (err) {
       console.error('Detection failed', err);
-      faceCamera.setStatus('Verification error', 'error');
+      lockForManualRescan(
+        'Verification request failed. Press rescan to try again.',
+        'Manual rescan required',
+        'The captured image was kept on screen because the API request failed.',
+      );
       verifying = false;
     } finally {
       detecting = false;
@@ -480,12 +611,14 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       await faceCamera.start();
       warmUntil = Date.now() + 1500;
       stableFaceFrames = 0;
+      setMatchPanelIdle();
       faceCamera.setStatus('Scanning face', 'warn');
       detectionTimer = setInterval(() => void runDetection(), 800);
     },
     onHide: () => {
       logInfo('Scan screen unmounted');
       if (detectionTimer) clearInterval(detectionTimer);
+      stopMatchPendingProgress();
       faceCamera.stop();
     }
   };
