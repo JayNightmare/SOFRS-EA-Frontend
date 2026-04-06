@@ -3,7 +3,7 @@ import { createFacePane } from '../../components/face';
 import { createKioskLayoutShell } from '../../components/kiosk-layout';
 import { svgIconHtml } from '../../components/icons';
 import { verifyFace, VerifyFaceResponse } from '../../services/verification';
-import { detectFaces } from '../../services/face-detector';
+import { detectFaces, FaceDetectionResult } from '../../services/face-detector';
 import { createKioskIdleScreen } from './idle';
 import { createKioskApprovedScreen } from './approved';
 import { createKioskDeniedScreen } from './denied';
@@ -12,6 +12,10 @@ import { createKioskDeniedScreen } from './denied';
 type ScanFeedbackTone = 'ok' | 'warn' | 'error';
 
 type LogPayload = Record<string, unknown>;
+
+const CAPTURE_QUALITY_THRESHOLD = 0.5;
+const REQUIRED_STABLE_FRAMES = 2;
+const COUNTDOWN_SECONDS = 3;
 
 // const buildErrorPayload = (error: unknown): LogPayload => {
 //   if (error instanceof Error) {
@@ -84,9 +88,12 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
   liveCorners.className = 'bio-frame-corners';
   const liveScanLine = document.createElement('div');
   liveScanLine.className = 'scan-line';
+  const countdownBadge = document.createElement('div');
+  countdownBadge.className = 'scan-countdown';
+  countdownBadge.style.display = 'none';
 
   const faceCamera = createFacePane();
-  liveFrame.append(faceCamera.element, liveCorners, liveScanLine);
+  liveFrame.append(faceCamera.element, liveCorners, liveScanLine, countdownBadge);
 
   const liveLabel = document.createElement('span');
   liveLabel.className = 'panel-label';
@@ -226,15 +233,120 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
 
   // --- Recognition Logic ---
   let detectionTimer: ReturnType<typeof setInterval> | null = null;
+  let countdownTimer: ReturnType<typeof setInterval> | null = null;
   let verifying = false;
   let detecting = false;
+  let countdownActive = false;
+  let countdownRemaining = 0;
   let resultLocked = false;
   let lastResponse: VerifyFaceResponse | null = null;
+  let lastEligibleDetection: FaceDetectionResult | null = null;
+  let countdownAudioContext: AudioContext | null = null;
   let stableFaceFrames = 0;
   let warmUntil = 0;
   let verifyProgressTimer: ReturnType<typeof setInterval> | null = null;
   let verifyProgressValue = 0;
   let verifyProgressStartedAt = 0;
+
+  const setRescanLocked = (locked: boolean): void => {
+    btnRescan.disabled = locked;
+  };
+
+  const updateDetectionGauge = (
+    qualityScore: number,
+    tone: ScanFeedbackTone,
+    label = 'DETECTION QUALITY',
+  ): void => {
+    matchTag.textContent = label;
+    matchPercent.textContent = `${Math.round(qualityScore * 100)}%`;
+    matchBox.dataset.tone = tone;
+  };
+
+  const getQualityScore = (result: FaceDetectionResult): number =>
+    result.primaryFace?.confidence ?? result.qualityScore ?? 0;
+
+  const isCaptureEligible = (result: FaceDetectionResult): boolean => {
+    const quality = getQualityScore(result);
+    return (
+      result.detected &&
+      result.faceCount === 1 &&
+      result.hasSingleForegroundFace &&
+      result.reasonCode === 'ok' &&
+      quality >= CAPTURE_QUALITY_THRESHOLD
+    );
+  };
+
+  const showCountdown = (value: number): void => {
+    countdownBadge.textContent = String(value);
+    countdownBadge.style.display = 'flex';
+    liveFrame.classList.add('countdown-active');
+  };
+
+  const hideCountdown = (): void => {
+    countdownBadge.style.display = 'none';
+    countdownBadge.textContent = '';
+    liveFrame.classList.remove('countdown-active');
+  };
+
+  const stopCountdown = (resetStableFrames = true): void => {
+    if (countdownTimer) {
+      clearInterval(countdownTimer);
+      countdownTimer = null;
+    }
+
+    countdownActive = false;
+    countdownRemaining = 0;
+    hideCountdown();
+    setRescanLocked(false);
+
+    if (resetStableFrames) {
+      stableFaceFrames = 0;
+    }
+  };
+
+  const ensureCountdownAudioContext = (): AudioContext | null => {
+    if (countdownAudioContext) {
+      return countdownAudioContext;
+    }
+
+    const AudioContextCtor =
+      window.AudioContext ??
+      (window as Window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+
+    if (!AudioContextCtor) {
+      return null;
+    }
+
+    countdownAudioContext = new AudioContextCtor();
+    return countdownAudioContext;
+  };
+
+  const playCountdownBeep = (): void => {
+    const audioContext = ensureCountdownAudioContext();
+    if (!audioContext) {
+      return;
+    }
+
+    if (audioContext.state === 'suspended') {
+      void audioContext.resume().catch(() => undefined);
+    }
+
+    const now = audioContext.currentTime;
+    const oscillator = audioContext.createOscillator();
+    const gainNode = audioContext.createGain();
+
+    oscillator.type = 'sine';
+    oscillator.frequency.setValueAtTime(987, now);
+
+    gainNode.gain.setValueAtTime(0.0001, now);
+    gainNode.gain.exponentialRampToValueAtTime(0.09, now + 0.015);
+    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 0.19);
+
+    oscillator.connect(gainNode);
+    gainNode.connect(audioContext.destination);
+    oscillator.start(now);
+    oscillator.stop(now + 0.2);
+  };
 
   // const resetToAwaitingState = () => {
   //   lastResponse = null;
@@ -495,6 +607,74 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     }
   };
 
+  const runCapturePipeline = async (statusLabel: string): Promise<void> => {
+    if (resultLocked || verifying) {
+      return;
+    }
+
+    verifying = true;
+    setRescanLocked(true);
+    faceCamera.setStatus(statusLabel, 'warn');
+
+    try {
+      const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
+      if (!rawSnapshot) {
+        faceCamera.setStatus('Camera frame not ready', 'error');
+        return;
+      }
+
+      const displaySnapshot = await buildCleanPreviewFromSnapshot(rawSnapshot) || rawSnapshot;
+      freezeLivePanel(displaySnapshot);
+
+      const file = await dataUrlToJpegFile(rawSnapshot);
+      const response = await verifyFace(file, 'temp_images');
+      resultLocked = true;
+      processMatch(response.similarity || 0, response, rawSnapshot);
+    } catch (error) {
+      console.error('Capture pipeline failed', error);
+      faceCamera.setStatus('Verification error', 'error');
+      updateDetectionGauge(0, 'error', 'CAPTURE FAILED');
+    } finally {
+      verifying = false;
+      if (!resultLocked) {
+        setRescanLocked(false);
+      }
+    }
+  };
+
+  const startCountdown = (): void => {
+    if (countdownActive || resultLocked || verifying) {
+      return;
+    }
+
+    countdownActive = true;
+    countdownRemaining = COUNTDOWN_SECONDS;
+    setRescanLocked(true);
+    showCountdown(countdownRemaining);
+    faceCamera.setStatus(`Hold still. Capturing in ${countdownRemaining}...`, 'ok');
+    playCountdownBeep();
+
+    countdownTimer = setInterval(() => {
+      countdownRemaining -= 1;
+
+      if (countdownRemaining > 0) {
+        showCountdown(countdownRemaining);
+        faceCamera.setStatus(`Hold still. Capturing in ${countdownRemaining}...`, 'ok');
+        playCountdownBeep();
+        return;
+      }
+
+      if (!lastEligibleDetection || !isCaptureEligible(lastEligibleDetection)) {
+        stopCountdown();
+        faceCamera.setStatus('Face moved. Realign to restart countdown.', 'warn');
+        return;
+      }
+
+      stopCountdown();
+      void runCapturePipeline('Capturing face');
+    }, 1000);
+  };
+
   const runDetection = async () => {
     if (resultLocked || verifying || detecting) return;
     detecting = true;
@@ -508,17 +688,23 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
         !video.videoWidth ||
         !video.videoHeight
       ) {
+        stopCountdown();
+        lastEligibleDetection = null;
         stableFaceFrames = 0;
         faceCamera.setStatus('Initializing camera', 'warn');
+        updateDetectionGauge(0, 'warn');
         return;
       }
 
       const result = await detectFaces(faceCamera.getVideoElement());
+      const qualityScore = getQualityScore(result);
 
       console.log('Detecting Face');
       faceCamera.setFaceOverlay(result.primaryFace);
 
       if (result.reasonCode === 'not-supported') {
+        stopCountdown();
+        lastEligibleDetection = null;
         stableFaceFrames = 0;
         verifying = true;
         faceCamera.setStatus('Detector unavailable, sending to API', 'warn');
@@ -543,31 +729,57 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       }
 
       if (result.reasonCode === 'multiple-faces') {
+        stopCountdown();
+        lastEligibleDetection = null;
         stableFaceFrames = 0;
         faceCamera.setStatus('Multiple faces detected', 'warn');
+        updateDetectionGauge(qualityScore, 'warn');
         return;
       }
 
       if (result.reasonCode === 'face-out-of-zone') {
+        stopCountdown();
+        lastEligibleDetection = null;
         stableFaceFrames = 0;
         faceCamera.setStatus('Move closer and centre face', 'warn');
+        updateDetectionGauge(qualityScore, 'warn');
+        return;
       }
 
       if (!result.detected || !result.primaryFace) {
+        stopCountdown();
+        lastEligibleDetection = null;
         stableFaceFrames = 0;
         faceCamera.setStatus('Align face with camera', 'warn');
+        updateDetectionGauge(0, 'warn');
         return;
       }
 
       if (!result.hasSingleForegroundFace) {
+        stopCountdown();
+        lastEligibleDetection = null;
         stableFaceFrames = 0;
         faceCamera.setStatus('Center one clear face in view', 'warn');
+        updateDetectionGauge(qualityScore, 'warn');
         return;
       }
 
+      if (qualityScore < CAPTURE_QUALITY_THRESHOLD) {
+        stopCountdown();
+        lastEligibleDetection = null;
+        stableFaceFrames = 0;
+        faceCamera.setStatus(`Improve alignment (${Math.round(qualityScore * 100)}% / 90%)`, 'warn');
+        updateDetectionGauge(qualityScore, 'warn');
+        return;
+      }
+
+      lastEligibleDetection = result;
       stableFaceFrames += 1;
-      if (stableFaceFrames < 2) {
-        faceCamera.setStatus('Hold still for capture', 'warn');
+
+      updateDetectionGauge(qualityScore, 'ok');
+
+      if (countdownActive) {
+        faceCamera.setStatus(`Hold still. Capturing in ${countdownRemaining}...`, 'ok');
         return;
       }
 
@@ -591,6 +803,8 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
 
         processMatch(response.similarity || 0, response, rawSnapshot);
       }
+
+      startCountdown();
     } catch (err) {
       console.error('Detection failed', err);
       lockForManualRescan(
