@@ -8,6 +8,13 @@ type OverlayFaceBox = {
     confidence: number;
 };
 
+type RenderedFaceBox = {
+    left: number;
+    top: number;
+    width: number;
+    height: number;
+};
+
 export type CameraPane = {
     element: HTMLElement;
     start: () => Promise<void>;
@@ -26,6 +33,33 @@ const createStatusChip = (): HTMLSpanElement => {
     chip.textContent = 'Camera idle';
     chip.dataset.tone = 'warn';
     return chip;
+};
+
+const mapFaceToRenderedViewport = (
+    face: OverlayFaceBox,
+    video: HTMLVideoElement,
+): RenderedFaceBox | null => {
+    const sourceWidth = video.videoWidth;
+    const sourceHeight = video.videoHeight;
+    const viewportWidth = video.clientWidth;
+    const viewportHeight = video.clientHeight;
+
+    if (!sourceWidth || !sourceHeight || !viewportWidth || !viewportHeight) {
+        return null;
+    }
+
+    const scale = Math.max(viewportWidth / sourceWidth, viewportHeight / sourceHeight);
+    const renderedWidth = sourceWidth * scale;
+    const renderedHeight = sourceHeight * scale;
+    const cropOffsetX = (viewportWidth - renderedWidth) / 2;
+    const cropOffsetY = (viewportHeight - renderedHeight) / 2;
+
+    return {
+        left: face.x * sourceWidth * scale + cropOffsetX,
+        top: face.y * sourceHeight * scale + cropOffsetY,
+        width: face.width * sourceWidth * scale,
+        height: face.height * sourceHeight * scale,
+    };
 };
 
 export const createFacePane = (): CameraPane => {
@@ -199,11 +233,21 @@ export const createFacePane = (): CameraPane => {
             return;
         }
 
+        const rendered = mapFaceToRenderedViewport(face, video);
         faceOverlay.style.display = 'block';
-        faceOverlay.style.left = `${face.x * 100}%`;
-        faceOverlay.style.top = `${face.y * 100}%`;
-        faceOverlay.style.width = `${face.width * 100}%`;
-        faceOverlay.style.height = `${face.height * 100}%`;
+
+        if (!rendered) {
+            faceOverlay.style.left = `${face.x * 100}%`;
+            faceOverlay.style.top = `${face.y * 100}%`;
+            faceOverlay.style.width = `${face.width * 100}%`;
+            faceOverlay.style.height = `${face.height * 100}%`;
+        } else {
+            faceOverlay.style.left = `${rendered.left}px`;
+            faceOverlay.style.top = `${rendered.top}px`;
+            faceOverlay.style.width = `${rendered.width}px`;
+            faceOverlay.style.height = `${rendered.height}px`;
+        }
+
         confidenceLabel.textContent = `${(face.confidence * 100).toFixed(1)}%`;
     };
 

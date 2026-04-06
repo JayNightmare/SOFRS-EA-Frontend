@@ -20,6 +20,7 @@ export interface FaceDetectionResult {
 	detected: boolean;
 	faceCount: number;
 	hasSingleForegroundFace: boolean;
+	qualityScore: number;
 	primaryFace: DetectedFace | null;
 	faces: DetectedFace[];
 	message: string;
@@ -32,6 +33,17 @@ const MIN_CENTER_X = 0.18;
 const MAX_CENTER_X = 0.82;
 const MIN_CENTER_Y = 0.15;
 const MAX_CENTER_Y = 0.85;
+const TARGET_FACE_AREA = 0.16;
+const FACE_AREA_TOLERANCE = 0.12;
+const TARGET_ASPECT_RATIO = 1;
+const ASPECT_TOLERANCE = 0.45;
+
+type FaceStabilitySnapshot = {
+	cx: number;
+	cy: number;
+	area: number;
+	ts: number;
+};
 
 /** Normalise a raw DOMRect bounding box relative to the source dimensions. */
 const normaliseBounds = (
@@ -45,6 +57,76 @@ const normaliseBounds = (
 	height: bounds.height / sourceHeight,
 	confidence: 1, // Shape Detection API doesn't expose confidence
 
+});
+
+const clamp01 = (value: number): number => Math.min(1, Math.max(0, value));
+
+const toRoundedScore = (value: number): number =>
+	Number(clamp01(value).toFixed(3));
+
+let previousFaceSnapshot: FaceStabilitySnapshot | null = null;
+
+const resetFaceStability = (): void => {
+	previousFaceSnapshot = null;
+};
+
+const updateFaceStability = (face: DetectedFace, timestamp: number): void => {
+	const area = face.width * face.height;
+	previousFaceSnapshot = {
+		cx: face.x + face.width / 2,
+		cy: face.y + face.height / 2,
+		area,
+		ts: timestamp,
+	};
+};
+
+const getStabilityScore = (face: DetectedFace, timestamp: number): number => {
+	if (!previousFaceSnapshot) {
+		return 0.88;
+	}
+
+	const age = timestamp - previousFaceSnapshot.ts;
+	if (age > 1800) {
+		return 0.88;
+	}
+
+	const cx = face.x + face.width / 2;
+	const cy = face.y + face.height / 2;
+	const area = face.width * face.height;
+	const centerDelta = Math.hypot(cx - previousFaceSnapshot.cx, cy - previousFaceSnapshot.cy);
+	const areaDelta = Math.abs(area - previousFaceSnapshot.area) /
+		Math.max(area, previousFaceSnapshot.area, 0.0001);
+
+	const centerStability = clamp01(1 - centerDelta / 0.12);
+	const areaStability = clamp01(1 - areaDelta / 0.45);
+	return 0.7 * centerStability + 0.3 * areaStability;
+};
+
+const getFaceQualityScore = (face: DetectedFace, timestamp: number): number => {
+	const area = face.width * face.height;
+	const cx = face.x + face.width / 2;
+	const cy = face.y + face.height / 2;
+	const aspectRatio = face.width / Math.max(face.height, 0.0001);
+	const centerDistance = Math.hypot(cx - 0.5, cy - 0.5);
+
+	const centerScore = clamp01(1 - centerDistance / 0.32);
+	const sizeScore = clamp01(1 - Math.abs(area - TARGET_FACE_AREA) / FACE_AREA_TOLERANCE);
+	const aspectScore = clamp01(1 - Math.abs(aspectRatio - TARGET_ASPECT_RATIO) / ASPECT_TOLERANCE);
+	const stabilityScore = getStabilityScore(face, timestamp);
+
+	const blended =
+		0.45 * centerScore +
+		0.25 * sizeScore +
+		0.15 * aspectScore +
+		0.15 * stabilityScore;
+
+	const zonePenalty = isForeground(face) ? 1 : 0.72;
+	return toRoundedScore(blended * zonePenalty);
+};
+
+const withScore = (face: DetectedFace, score: number): DetectedFace => ({
+	...face,
+	confidence: score,
 });
 
 const isForeground = (face: DetectedFace): boolean => {
@@ -224,6 +306,7 @@ const buildNotSupportedResult = (message?: string): FaceDetectionResult => ({
 	detected: false,
 	faceCount: 0,
 	hasSingleForegroundFace: false,
+	qualityScore: 0,
 	primaryFace: null,
 	faces: [],
 	message: message ?? notSupportedMessage ?? DEFAULT_NOT_SUPPORTED_MESSAGE,
@@ -252,6 +335,7 @@ export const detectFaces = async (
 			detected: false,
 			faceCount: 0,
 			hasSingleForegroundFace: false,
+			qualityScore: 0,
 			primaryFace: null,
 			faces: [],
 			message: "Video not ready.",
@@ -290,10 +374,12 @@ export const detectFaces = async (
 	);
 
 	if (faces.length === 0) {
+		resetFaceStability();
 		return {
 			detected: false,
 			faceCount: 0,
 			hasSingleForegroundFace: false,
+			qualityScore: 0,
 			primaryFace: null,
 			faces: [],
 			message: "No face detected.",
@@ -303,10 +389,12 @@ export const detectFaces = async (
 
 	const primary = faces[0];
 	if (!primary) {
+		resetFaceStability();
 		return {
 			detected: false,
 			faceCount: 0,
 			hasSingleForegroundFace: false,
+			qualityScore: 0,
 			primaryFace: null,
 			faces: [],
 			message: "No face detected.",
@@ -314,39 +402,52 @@ export const detectFaces = async (
 		};
 	}
 
-	const foregroundFaces = faces.filter(isForeground);
-	const hasSingleForegroundFace = foregroundFaces.length === 1 && isForeground(primary);
+	const timestamp = performance.now();
+	const qualityScore = getFaceQualityScore(primary, timestamp);
+	const scoredPrimary = withScore(primary, qualityScore);
+	const scoredFaces = [scoredPrimary, ...faces.slice(1)];
+
+	const foregroundFaces = scoredFaces.filter(isForeground);
+	const hasSingleForegroundFace =
+		foregroundFaces.length === 1 && isForeground(scoredPrimary);
 
 	if (faces.length > 1) {
+		resetFaceStability();
 		return {
 			detected: true,
 			faceCount: faces.length,
 			hasSingleForegroundFace: false,
-			primaryFace: primary,
-			faces,
+			qualityScore,
+			primaryFace: scoredPrimary,
+			faces: scoredFaces,
 			message: "Multiple faces detected. Only one person can scan at a time.",
 			reasonCode: "multiple-faces",
 		};
 	}
 
-	if (!isForeground(primary)) {
+	if (!isForeground(scoredPrimary)) {
+		resetFaceStability();
 		return {
 			detected: true,
 			faceCount: faces.length,
 			hasSingleForegroundFace: false,
-			primaryFace: primary,
-			faces,
-			message: getOutOfZoneMessage(primary),
+			qualityScore,
+			primaryFace: scoredPrimary,
+			faces: scoredFaces,
+			message: getOutOfZoneMessage(scoredPrimary),
 			reasonCode: "face-out-of-zone",
 		};
 	}
+
+	updateFaceStability(scoredPrimary, timestamp);
 
 	return {
 		detected: true,
 		faceCount: faces.length,
 		hasSingleForegroundFace,
-		primaryFace: primary,
-		faces,
+		qualityScore,
+		primaryFace: scoredPrimary,
+		faces: scoredFaces,
 		message: "Face detected.",
 		reasonCode: "ok",
 	};
