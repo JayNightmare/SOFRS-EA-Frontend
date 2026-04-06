@@ -6,68 +6,68 @@ let detachSettingsListener: (() => void) | null = null;
 let waitingForInteraction = false;
 
 const attemptPlayback = (): void => {
-	if (!backgroundAudio) {
-		return;
-	}
+  if (!backgroundAudio) {
+    return;
+  }
 
-	void backgroundAudio.play().catch(() => {
-		if (waitingForInteraction) {
-			return;
-		}
+  void backgroundAudio.play().catch(() => {
+    if (waitingForInteraction) {
+      return;
+    }
 
-		waitingForInteraction = true;
-		window.addEventListener("pointerdown", handleFirstInteraction, {
-			once: true,
-		});
-	});
+    waitingForInteraction = true;
+    window.addEventListener("pointerdown", handleFirstInteraction, {
+      once: true,
+    });
+  });
 };
 
 const handleFirstInteraction = (): void => {
-	waitingForInteraction = false;
-	attemptPlayback();
+  waitingForInteraction = false;
+  attemptPlayback();
 };
 
 const applyMusicSettings = (): void => {
-	if (!backgroundAudio) {
-		return;
-	}
+  if (!backgroundAudio) {
+    return;
+  }
 
-	const settings = getAppSettings();
-	backgroundAudio.volume = settings.musicVolume;
+  const settings = getAppSettings();
+  backgroundAudio.volume = settings.musicVolume;
 
-	if (!settings.musicEnabled) {
-		backgroundAudio.pause();
-		backgroundAudio.currentTime = 0;
-		return;
-	}
+  if (!settings.musicEnabled) {
+    backgroundAudio.pause();
+    backgroundAudio.currentTime = 0;
+    return;
+  }
 
-	attemptPlayback();
+  attemptPlayback();
 };
 
 export const initBackgroundMusic = (): void => {
-	if (backgroundAudio) {
-		applyMusicSettings();
-		return;
-	}
+  if (backgroundAudio) {
+    applyMusicSettings();
+    return;
+  }
 
-	backgroundAudio = new Audio(bgMusicSrc);
-	backgroundAudio.loop = true;
-	backgroundAudio.preload = "auto";
+  backgroundAudio = new Audio(bgMusicSrc);
+  backgroundAudio.loop = true;
+  backgroundAudio.preload = "auto";
 
-	if (!detachSettingsListener) {
-		detachSettingsListener = subscribeToSettings(() => {
-			applyMusicSettings();
-		});
-	}
+  if (!detachSettingsListener) {
+    detachSettingsListener = subscribeToSettings(() => {
+      applyMusicSettings();
+    });
+  }
 
-	applyMusicSettings();
+  applyMusicSettings();
 };
 
 export const stopBackgroundMusic = (): void => {
-	if (!backgroundAudio) {
-		return;
-	}
+  if (!backgroundAudio) {
+    return;
+  }
 
-	backgroundAudio.pause();
-	backgroundAudio.currentTime = 0;
+  backgroundAudio.pause();
+  backgroundAudio.currentTime = 0;
 };
