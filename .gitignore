@@ -148,3 +148,5 @@ YOLOv26/
 .DS_Store
 
 Backend/
+
+.vscode/settings.json
