@@ -269,9 +269,9 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     const quality = getQualityScore(result);
     return (
       result.detected &&
+      Boolean(result.primaryFace) &&
       result.faceCount === 1 &&
-      result.hasSingleForegroundFace &&
-      result.reasonCode === 'ok' &&
+      result.reasonCode !== 'multiple-faces' &&
       quality >= CAPTURE_QUALITY_THRESHOLD
     );
   };
@@ -615,11 +615,13 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
     verifying = true;
     setRescanLocked(true);
     faceCamera.setStatus(statusLabel, 'warn');
+    setMatchPanelVerifying();
 
     try {
       const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
       if (!rawSnapshot) {
         faceCamera.setStatus('Camera frame not ready', 'error');
+        setMatchPanelIdle();
         return;
       }
 
@@ -706,25 +708,8 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
         stopCountdown();
         lastEligibleDetection = null;
         stableFaceFrames = 0;
-        verifying = true;
-        faceCamera.setStatus('Detector unavailable, sending to API', 'warn');
-        setMatchPanelVerifying();
-
-        const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
-        if (!rawSnapshot) {
-          faceCamera.setStatus('Camera frame not ready', 'error');
-          setMatchPanelIdle();
-          verifying = false;
-          return;
-        }
-
-        const displaySnapshot = await buildCleanPreviewFromSnapshot(rawSnapshot) || rawSnapshot;
-        freezeLivePanel(displaySnapshot);
-        const file = await dataUrlToJpegFile(rawSnapshot);
-        const response = await verifyFace(file, 'temp_images');
-        resultLocked = true;
-
-        processMatch(response.similarity || 0, response, rawSnapshot);
+        updateDetectionGauge(0, 'warn', 'DETECTION QUALITY');
+        void runCapturePipeline('Detector unavailable, sending to API');
         return;
       }
 
@@ -733,15 +718,6 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
         lastEligibleDetection = null;
         stableFaceFrames = 0;
         faceCamera.setStatus('Multiple faces detected', 'warn');
-        updateDetectionGauge(qualityScore, 'warn');
-        return;
-      }
-
-      if (result.reasonCode === 'face-out-of-zone') {
-        stopCountdown();
-        lastEligibleDetection = null;
-        stableFaceFrames = 0;
-        faceCamera.setStatus('Move closer and centre face', 'warn');
         updateDetectionGauge(qualityScore, 'warn');
         return;
       }
@@ -755,20 +731,14 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
         return;
       }
 
-      if (!result.hasSingleForegroundFace) {
-        stopCountdown();
-        lastEligibleDetection = null;
-        stableFaceFrames = 0;
-        faceCamera.setStatus('Center one clear face in view', 'warn');
-        updateDetectionGauge(qualityScore, 'warn');
-        return;
-      }
-
       if (qualityScore < CAPTURE_QUALITY_THRESHOLD) {
         stopCountdown();
         lastEligibleDetection = null;
         stableFaceFrames = 0;
-        faceCamera.setStatus(`Improve alignment (${Math.round(qualityScore * 100)}% / 90%)`, 'warn');
+        faceCamera.setStatus(
+          `Improve alignment (${Math.round(qualityScore * 100)}% / ${Math.round(CAPTURE_QUALITY_THRESHOLD * 100)}%)`,
+          'warn',
+        );
         updateDetectionGauge(qualityScore, 'warn');
         return;
       }
@@ -783,25 +753,9 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
         return;
       }
 
-      if (result.faceCount === 1) {
-        verifying = true;
-        faceCamera.setStatus('Sending to API', 'warn');
-        setMatchPanelVerifying();
-        const rawSnapshot = faceCamera.captureFrameJpeg(1080, 0.9);
-        if (!rawSnapshot) {
-          faceCamera.setStatus('Camera frame not ready', 'error');
-          setMatchPanelIdle();
-          verifying = false;
-          return;
-        }
-
-        const displaySnapshot = await buildCleanPreviewFromSnapshot(rawSnapshot) || rawSnapshot;
-        freezeLivePanel(displaySnapshot);
-        const file = await dataUrlToJpegFile(rawSnapshot);
-        const response = await verifyFace(file, 'temp_images');
-        resultLocked = true;
-
-        processMatch(response.similarity || 0, response, rawSnapshot);
+      if (stableFaceFrames < REQUIRED_STABLE_FRAMES) {
+        faceCamera.setStatus('Locking face. Hold still for countdown.', 'ok');
+        return;
       }
 
       startCountdown();
@@ -825,14 +779,23 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
       await faceCamera.start();
       warmUntil = Date.now() + 1500;
       stableFaceFrames = 0;
+      lastEligibleDetection = null;
       setMatchPanelIdle();
+      updateDetectionGauge(0, 'warn');
       faceCamera.setStatus('Scanning face', 'warn');
       detectionTimer = setInterval(() => void runDetection(), 800);
     },
     onHide: () => {
       logInfo('Scan screen unmounted');
       if (detectionTimer) clearInterval(detectionTimer);
+      stopCountdown();
       stopMatchPendingProgress();
+
+      if (countdownAudioContext) {
+        void countdownAudioContext.close().catch(() => undefined);
+        countdownAudioContext = null;
+      }
+
       faceCamera.stop();
     }
   };
