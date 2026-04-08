@@ -1,3 +1,5 @@
+import captureSoundSrc from '../music/approved.mp3';
+
 type StatusTone = 'ok' | 'warn' | 'error';
 
 type OverlayFaceBox = {
@@ -13,6 +15,34 @@ type RenderedFaceBox = {
     top: number;
     width: number;
     height: number;
+};
+
+let shutterAudio: HTMLAudioElement | null = null;
+let lastShutterTimestamp = 0;
+
+const ensureShutterAudio = (): HTMLAudioElement => {
+    if (shutterAudio) {
+        return shutterAudio;
+    }
+
+    shutterAudio = new Audio(captureSoundSrc);
+    shutterAudio.preload = 'auto';
+    shutterAudio.volume = 0.95;
+    return shutterAudio;
+};
+
+const playShutterSound = (): void => {
+    const nowMs = Date.now();
+    if (nowMs - lastShutterTimestamp < 120) {
+        return;
+    }
+    lastShutterTimestamp = nowMs;
+
+    const baseSound = ensureShutterAudio();
+    const clip = baseSound.cloneNode(true) as HTMLAudioElement;
+    clip.volume = baseSound.volume;
+    clip.currentTime = 0;
+    void clip.play().catch(() => undefined);
 };
 
 export type CameraPane = {
@@ -207,21 +237,24 @@ export const createFacePane = (): CameraPane => {
         if (!drawSquareFrame(targetSize)) {
             return null;
         }
-        return canvas.toDataURL('image/jpeg', quality);
+
+        const snapshot = canvas.toDataURL('image/jpeg', quality);
+        playShutterSound();
+        return snapshot;
     };
 
     const captureFrameBlob = async (targetSize = 640, quality = 0.88): Promise<Blob | null> => {
         if (!context) {
             return null;
         }
-        if (!video.videoWidth || !video.videoHeight) {
+        if (!drawSquareFrame(targetSize)) {
             return null;
         }
-        canvas.width = targetSize;
-        canvas.height = targetSize;
-        context.drawImage(video, 0, 0, targetSize, targetSize);
         return new Promise((resolve) => {
             canvas.toBlob((blob) => {
+                if (blob) {
+                    playShutterSound();
+                }
                 resolve(blob);
             }, 'image/jpeg', quality);
         });

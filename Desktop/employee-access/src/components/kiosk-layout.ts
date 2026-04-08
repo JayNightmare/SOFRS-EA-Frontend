@@ -6,13 +6,19 @@ import { createKioskIdleScreen } from "../pages/kiosk/idle";
 import { createKioskRegisterLandingScreen } from "../pages/kiosk/register";
 // eslint-disable-next-line import/no-unresolved
 import { createKioskSettingsScreen } from "../pages/kiosk/settings";
+import { createKioskScanScreen } from "../pages/kiosk/scan";
 import { createSvgIcon, ICON_PATHS, svgIconHtml } from "./icons";
 
-type KioskNavMode = "check-in" | "check-out" | "register" | "help";
+type KioskNavMode = "home" | "check-in" | "check-out" | "register" | "help";
 
 const openHomeScreen = (): void => {
 	void navigate(createKioskIdleScreen);
 };
+
+const openScanScreen = (mode: KioskNavMode): void => {
+	void navigate(() => createKioskScanScreen(mode === "check-out" ? "check-out" : "check-in"));
+};
+
 
 const openRegisterScreen = (): void => {
 	void navigate(createKioskRegisterLandingScreen);
@@ -52,6 +58,7 @@ const createSidebarItem = (
 export interface SidebarNavElements {
 	sidebar: HTMLElement;
 	navHome: HTMLButtonElement;
+	navCheckIn: HTMLButtonElement;
 	navRegister: HTMLButtonElement;
 	navHelp: HTMLButtonElement;
 }
@@ -65,7 +72,9 @@ export const createKioskSidebar = (
 	const sidebar = document.createElement("aside");
 	sidebar.className = "kiosk-sidebar";
 
-	const navHome = createSidebarItem(
+	const navHome = createSidebarItem("Home", ICON_PATHS.home, mode === "home");
+
+	const navCheckIn = createSidebarItem(
 		"Check In",
 		ICON_PATHS.doorOpen,
 		mode === "check-in" || mode === "check-out",
@@ -74,9 +83,9 @@ export const createKioskSidebar = (
 	const navHelp = createSidebarItem("Help", ICON_PATHS.info, mode === "help");
 
 	const spacer = document.createElement("div");
-	sidebar.append(navHome, navRegister, spacer, navHelp);
+	sidebar.append(navHome, navCheckIn, navRegister, spacer, navHelp);
 
-	return { sidebar, navHome, navRegister, navHelp };
+	return { sidebar, navHome, navCheckIn, navRegister, navHelp };
 };
 
 /**
@@ -132,6 +141,7 @@ export const createKioskLayoutShell = (
 	logo?.addEventListener("click", openHomeScreen);
 
 	sidebar.navHome.addEventListener("click", openHomeScreen);
+	sidebar.navCheckIn.addEventListener("click", () => openScanScreen(mode));
 	sidebar.navRegister.addEventListener("click", openRegisterScreen);
 	sidebar.navHelp.addEventListener("click", openHelpScreen);
 

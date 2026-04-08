@@ -1,6 +1,8 @@
 import { View, navigate } from "../../renderer";
 import { createKioskLayoutShell } from "../../components/kiosk-layout";
 import { createKioskIdleScreen } from "./idle";
+import { createKioskScanScreen } from "./scan";
+import { createAdminDashboard } from "../admin/dashboard";
 import { VerifyFaceResponse } from "../../services/verification";
 import { svgIconHtml } from "../../components/icons";
 
@@ -18,13 +20,15 @@ export const createKioskApprovedScreen = (
 	iconBox.className = "success-icon-box";
 	iconBox.innerHTML = svgIconHtml("check");
 
-	const name = response.employee?.name || "Verified User";
-	const firstName = name.split(" ")[0] || name;
+	const nameFromRecord =
+		(typeof response.employee?.fullname === "string" && response.employee.fullname) ||
+		(typeof response.employee?.fullName === "string" && response.employee.fullName) ||
+		"Verified User";
 
 	const headings = document.createElement("div");
 	headings.className = "feedback-headings";
 	headings.innerHTML = `
-    <h1>Welcome Back, <span>${firstName}</span></h1>
+    <h1>Welcome Back, <span>${nameFromRecord}</span></h1>
     <p>Access Granted</p>
   `;
 
@@ -47,22 +51,41 @@ export const createKioskApprovedScreen = (
 
 	const footer = document.createElement("div");
 	footer.className = "unlocking-footer";
-	footer.innerHTML = `<div class="unlocking-line"></div> UNLOCKING... <div class="unlocking-line"></div>`;
+	footer.innerHTML = `<div class="unlocking-line"></div> WAITING FOR NEXT ACTION <div class="unlocking-line"></div>`;
 
-	body.append(iconBox, headings, cards, footer);
+	const actions = document.createElement("div");
+	actions.className = "approved-actions";
+
+	const scanAgainButton = document.createElement("button");
+	scanAgainButton.className = "action-btn secondary";
+	scanAgainButton.type = "button";
+	scanAgainButton.textContent = "Scan Next Person";
+	scanAgainButton.addEventListener("click", () => {
+		void navigate(() => createKioskScanScreen(mode));
+	});
+
+	const returnHomeButton = document.createElement("button");
+	returnHomeButton.className = "action-btn secondary";
+	returnHomeButton.type = "button";
+	returnHomeButton.textContent = "Return Home";
+	returnHomeButton.addEventListener("click", () => {
+		void navigate(createKioskIdleScreen);
+	});
+
+	const continueDashboardButton = document.createElement("button");
+	continueDashboardButton.className = "action-btn primary";
+	continueDashboardButton.type = "button";
+	continueDashboardButton.textContent = "Continue To Dashboard";
+	continueDashboardButton.addEventListener("click", () => {
+		void navigate(createAdminDashboard);
+	});
+
+	actions.append(scanAgainButton, continueDashboardButton, returnHomeButton);
+
+	body.append(iconBox, headings, cards, footer, actions);
 	main.append(body);
-
-	let timeout: ReturnType<typeof setTimeout>;
 
 	return {
 		element: container,
-		onShow: () => {
-			timeout = setTimeout(() => {
-				navigate(createKioskIdleScreen);
-			}, 5000);
-		},
-		onHide: () => {
-			if (timeout) clearTimeout(timeout);
-		},
 	};
 };

@@ -8,7 +8,9 @@ type VerificationReasonCode =
 
 export type EmployeeRecord = {
     id?: string;
+    name?: string;
     fullname?: string;
+    fullName?: string;
     department?: string;
     title?: string;
     ownerType?: string;
@@ -28,7 +30,7 @@ export type VerifyFaceResponse = {
     bestMatchImageDataUrl: string | null;
 };
 
-const DEFAULT_API_BASE_URL = process.env.VITE_DEFAULT_API_BASE_URL || "https://api.example.com";
+const DEFAULT_API_BASE_URL = import.meta.env.VITE_DEFAULT_API_BASE_URL || "https://api.example.com";
 const VERIFY_PATH = "/image/search";
 const HEALTH_PATH = "/health";
 
@@ -97,6 +99,14 @@ const normalizePersonRecord = (
     }
 
     const source = value as Record<string, unknown>;
+    const resolvedName =
+        typeof source.name === "string"
+            ? source.name
+            : typeof source.fullname === "string"
+                ? source.fullname
+                : typeof source.fullName === "string"
+                    ? source.fullName
+                    : undefined;
 
     return {
         ...source,
@@ -106,11 +116,18 @@ const normalizePersonRecord = (
                 : typeof source._id === "string"
                     ? source._id
                     : undefined,
+        name: resolvedName,
         fullname:
             typeof source.fullname === "string"
                 ? source.fullname
                 : typeof source.fullName === "string"
                     ? source.fullName
+                    : undefined,
+        fullName:
+            typeof source.fullName === "string"
+                ? source.fullName
+                : typeof source.fullname === "string"
+                    ? source.fullname
                     : undefined,
         ownerType,
     };

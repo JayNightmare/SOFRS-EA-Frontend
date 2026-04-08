@@ -32,7 +32,6 @@ export interface VisitorRead {
 }
 
 export interface EmployeeCreate {
-  id: string;
   fullName: string;
   gender?: string;
   DoB?: string;

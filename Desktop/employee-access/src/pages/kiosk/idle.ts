@@ -155,7 +155,7 @@ export const createKioskIdleScreen = (): View => {
 
 	const version = document.createElement("div");
 	version.className = "footer-version";
-	version.innerHTML = `${svgIconHtml("shieldCheck")} Secure Kiosk v${APP_VERSION}`;
+	version.innerHTML = `${svgIconHtml("shieldCheck")} <strong>v${APP_VERSION}</strong> <span class="footer-desc">Secure Kiosk</span>`;
 
 	footer.append(weather, version);
 
@@ -163,7 +163,7 @@ export const createKioskIdleScreen = (): View => {
 
 	// Fetch real weather data asynchronously
 	void fetchWeather().then((data) => {
-		weather.innerHTML = `${svgIconHtml(data.iconKey)} <strong>${data.temperatureC}ºC</strong> ${data.description}`;
+		weather.innerHTML = `${svgIconHtml(data.iconKey)} <strong>${data.temperatureC}ºC</strong> <span class="footer-desc">${data.description}</span>`;
 	});
 
 	return {

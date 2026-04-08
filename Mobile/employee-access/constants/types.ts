@@ -27,6 +27,9 @@ export interface UserData {
   role: UserRole;
   fullName: string;
   idNumber: string;
+  gender?: string;
+  DoB?: string;
+  email?: string;
   /** Visitor-only: name of the employee companion. */
   companionName?: string;
   /** Visitor-only: optional phone number. */
