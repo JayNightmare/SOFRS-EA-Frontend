@@ -37,8 +37,24 @@ export interface EmployeeCreate {
   Phone?: string;
 }
 
+export interface EmployeeUpdate {
+  fullName?: string;
+  gender?: string;
+  DoB?: string;
+  email?: string;
+  Phone?: string;
+}
+
 export interface VisitorCreate {
   fullName: string;
+  gender?: string;
+  DoB?: string;
+  email?: string;
+  Phone?: string;
+}
+
+export interface VisitorUpdate {
+  fullName?: string;
   gender?: string;
   DoB?: string;
   email?: string;
@@ -78,24 +94,60 @@ class ApiError extends Error {
   }
 }
 
+async function toApiError(res: Response): Promise<ApiError> {
+  let detail: string | undefined;
+  try {
+    const body = await res.json();
+    detail = body.detail ?? JSON.stringify(body);
+  } catch {
+    detail = await res.text();
+  }
+
+  return new ApiError(
+    res.status === 401 || res.status === 403
+      ? 'Invalid API key or access denied'
+      : res.status === 404
+        ? 'Not found'
+        : `Request failed (${res.status})`,
+    res.status,
+    detail,
+  );
+}
+
+async function fetchWith404Fallback<T>(
+  endpoints: string[],
+  method: string,
+  headers: HeadersInit,
+): Promise<T> {
+  const tried: string[] = [];
+
+  for (const endpoint of endpoints) {
+    tried.push(endpoint);
+    const res = await fetch(endpoint, {
+      method,
+      headers,
+    });
+
+    if (res.ok) {
+      return res.json() as Promise<T>;
+    }
+
+    const error = await toApiError(res);
+    if (error.status !== 404) {
+      throw error;
+    }
+  }
+
+  throw new ApiError(
+    'Not found',
+    404,
+    `No compatible endpoint responded. Tried: ${tried.join(', ')}`,
+  );
+}
+
 async function handleResponse<T>(res: Response): Promise<T> {
   if (!res.ok) {
-    let detail: string | undefined;
-    try {
-      const body = await res.json();
-      detail = body.detail ?? JSON.stringify(body);
-    } catch {
-      detail = await res.text();
-    }
-    throw new ApiError(
-      res.status === 401 || res.status === 403
-        ? 'Invalid API key or access denied'
-        : res.status === 404
-          ? 'Not found'
-          : `Request failed (${res.status})`,
-      res.status,
-      detail,
-    );
+    throw await toApiError(res);
   }
   return res.json() as Promise<T>;
 }
@@ -116,6 +168,82 @@ export async function createVisitor(data: VisitorCreate): Promise<VisitorRead> {
     body: JSON.stringify(data),
   });
   return handleResponse<VisitorRead>(res);
+}
+
+export async function listEmployees(): Promise<EmployeeRead[]> {
+  return fetchWith404Fallback<EmployeeRead[]>(
+    [`${BASE_URL}/employee/get/employees`],
+    'GET',
+    getHeaders(),
+  );
+}
+
+export async function getEmployeeById(id: string): Promise<EmployeeRead> {
+  return fetchWith404Fallback<EmployeeRead>(
+    [
+      `${BASE_URL}/employee/get/employees/${encodeURIComponent(id)}`,
+    ],
+    'GET',
+    getHeaders(),
+  );
+}
+
+export async function updateEmployee(
+  id: string,
+  data: EmployeeUpdate,
+): Promise<EmployeeRead> {
+  const res = await fetch(`${BASE_URL}/employee/update/employees/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<EmployeeRead>(res);
+}
+
+export async function deleteEmployee(id: string): Promise<{ detail: string }> {
+  const res = await fetch(`${BASE_URL}/employee/delete/employees/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+  return handleResponse<{ detail: string }>(res);
+}
+
+export async function listVisitors(): Promise<VisitorRead[]> {
+  return fetchWith404Fallback<VisitorRead[]>(
+    [`${BASE_URL}/visitor/get/visitors`],
+    'GET',
+    getHeaders(),
+  );
+}
+
+export async function getVisitorById(id: string): Promise<VisitorRead> {
+  return fetchWith404Fallback<VisitorRead>(
+    [
+      `${BASE_URL}/visitor/get/visitors/${encodeURIComponent(id)}`,
+    ],
+    'GET',
+    getHeaders(),
+  );
+}
+
+export async function updateVisitor(
+  id: string,
+  data: VisitorUpdate,
+): Promise<VisitorRead> {
+  const res = await fetch(`${BASE_URL}/visitor/update/visitors/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { ...getHeaders(), 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  return handleResponse<VisitorRead>(res);
+}
+
+export async function deleteVisitor(id: string): Promise<{ detail: string }> {
+  const res = await fetch(`${BASE_URL}/visitor/delete/visitors/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  });
+  return handleResponse<{ detail: string }>(res);
 }
 
 export async function searchImage(imageBlob: Blob): Promise<ImageSearchResponse> {

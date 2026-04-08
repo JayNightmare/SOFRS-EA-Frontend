@@ -23,6 +23,13 @@ import {
 } from "@/constants/theme";
 import type { UserRole } from "@/constants/types";
 
+const ISO_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
+
+const toOptionalValue = (value: string): string | undefined => {
+	const trimmed = value.trim();
+	return trimmed.length > 0 ? trimmed : undefined;
+};
+
 export default function IdentityVerificationScreen() {
 	const { role: rawRole } = useLocalSearchParams<{ role: string }>();
 	const initialRole: UserRole =
@@ -35,55 +42,60 @@ export default function IdentityVerificationScreen() {
 
 	const [selectedRole, setSelectedRole] = useState<UserRole>(initialRole);
 	const [fullName, setFullName] = useState("");
-	const [idNumber, setIdNumber] = useState("");
-	const [companionName, setCompanionName] = useState("");
+	const [gender, setGender] = useState("");
+	const [dob, setDob] = useState("");
+	const [email, setEmail] = useState("");
 	const [phone, setPhone] = useState("");
 
-	const isFormValid = () => {
-		if (!fullName.trim()) return false;
-		if (selectedRole === "employee" && !idNumber.trim())
-			return false;
-		if (selectedRole === "visitor" && !companionName.trim())
-			return false;
-		return true;
+	const isDateFormatValid = (): boolean => {
+		const value = dob.trim();
+		return value.length === 0 || ISO_DATE_PATTERN.test(value);
+	};
+
+	const isFormValid = (): boolean => {
+		return fullName.trim().length > 0 && isDateFormatValid();
 	};
 
 	const handleContinue = async () => {
-		if (!isFormValid()) return;
+		if (!fullName.trim()) {
+			setError("Full name is required.");
+			return;
+		}
+
+		if (!isDateFormatValid()) {
+			setError("Date of birth must use YYYY-MM-DD format.");
+			return;
+		}
+
 		setError(null);
 		setIsSubmitting(true);
+
 		try {
 			const fullNameTrim = fullName.trim();
-			const phoneTrim =
-				selectedRole === "visitor" && phone.trim()
-					? phone.trim()
-					: undefined;
-			if (selectedRole === "employee") {
-				const created = await createEmployee({
-					id: idNumber.trim(),
-					fullName: fullNameTrim,
-				});
-				setRecordId(created.id);
-			} else {
-				const created = await createVisitor({
-					fullName: fullNameTrim,
-					Phone: phoneTrim,
-				});
-				setRecordId(created.id);
-			}
+			const payload = {
+				fullName: fullNameTrim,
+				gender: toOptionalValue(gender),
+				DoB: toOptionalValue(dob),
+				email: toOptionalValue(email),
+				Phone: toOptionalValue(phone),
+			};
+
+			const created =
+				selectedRole === "employee"
+					? await createEmployee(payload)
+					: await createVisitor(payload);
+
+			setRecordId(created.id);
 			setUserData({
 				role: selectedRole,
-				fullName: fullNameTrim,
-				idNumber:
-					selectedRole === "employee"
-						? idNumber.trim()
-						: `VIS-${Date.now()}`,
-				companionName:
-					selectedRole === "visitor"
-						? companionName.trim()
-						: undefined,
-				phone: phoneTrim,
+				fullName: created.fullName,
+				idNumber: created.id,
+				gender: payload.gender,
+				DoB: payload.DoB,
+				email: payload.email,
+				phone: payload.Phone,
 			});
+
 			router.push("/face-setup");
 		} catch (err) {
 			const msg =
@@ -115,7 +127,6 @@ export default function IdentityVerificationScreen() {
 				]}
 				keyboardShouldPersistTaps="handled"
 			>
-				{/* Header */}
 				<View style={styles.header}>
 					<Pressable
 						onPress={() => router.back()}
@@ -144,10 +155,8 @@ export default function IdentityVerificationScreen() {
 					<View style={{ width: 24 }} />
 				</View>
 
-				{/* Blue accent line */}
 				<View style={styles.accentLine} />
 
-				{/* Shield icon */}
 				<View style={styles.shieldWrapper}>
 					<Svg
 						width={36}
@@ -175,14 +184,13 @@ export default function IdentityVerificationScreen() {
 					Verify your identity
 				</Text>
 				<Text style={styles.description}>
-					Please select your membership status and
-					provide your identification details to
-					proceed with the check-in process.
+					Select your role and provide profile
+					details to create a record before face
+					capture.
 				</Text>
 
-				{/* Role toggle */}
 				<Text style={styles.sectionLabel}>
-					ARE YOU AN EXISTING MEMBER?
+					SELECT ROLE
 				</Text>
 				<View style={styles.toggleContainer}>
 					<Pressable
@@ -206,7 +214,7 @@ export default function IdentityVerificationScreen() {
 									styles.toggleTextActive,
 							]}
 						>
-							Existing Member
+							Employee
 						</Text>
 					</Pressable>
 					<Pressable
@@ -230,29 +238,13 @@ export default function IdentityVerificationScreen() {
 									styles.toggleTextActive,
 							]}
 						>
-							New Visitor
+							Visitor
 						</Text>
 					</Pressable>
 				</View>
 
-				{/* Form fields */}
 				<Text style={styles.inputLabel}>Full Name</Text>
 				<View style={styles.inputContainer}>
-					<Svg
-						width={20}
-						height={20}
-						viewBox="0 0 24 24"
-						fill="none"
-					>
-						<Path
-							d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
-							stroke={
-								AppColors.textMuted
-							}
-							strokeWidth={1.5}
-							strokeLinecap="round"
-						/>
-					</Svg>
 					<TextInput
 						style={styles.input}
 						placeholder="John Doe"
@@ -265,147 +257,140 @@ export default function IdentityVerificationScreen() {
 					/>
 				</View>
 
-				{selectedRole === "employee" ? (
-					<>
-						<Text style={styles.inputLabel}>
-							ID Number (Employee or
-							Visitor)
-						</Text>
-						<View
-							style={
-								styles.inputContainer
-							}
+				<Text style={styles.inputLabel}>
+					Gender (Optional)
+				</Text>
+				<View style={styles.toggleContainer}>
+					<Pressable
+						style={[
+							styles.toggleButton,
+							gender === "male" &&
+								styles.toggleActive,
+						]}
+						onPress={() =>
+							setGender(
+								gender ===
+									"male"
+									? ""
+									: "male",
+							)
+						}
+					>
+						<Text
+							style={[
+								styles.toggleText,
+								gender ===
+									"male" &&
+									styles.toggleTextActive,
+							]}
 						>
-							<Svg
-								width={20}
-								height={20}
-								viewBox="0 0 24 24"
-								fill="none"
-							>
-								<Path
-									d="M4 4h16a2 2 0 012 2v12a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2z"
-									stroke={
-										AppColors.textMuted
-									}
-									strokeWidth={
-										1.5
-									}
-									fill="none"
-								/>
-								<Path
-									d="M7 10h4M7 14h6"
-									stroke={
-										AppColors.textMuted
-									}
-									strokeWidth={
-										1.5
-									}
-									strokeLinecap="round"
-								/>
-							</Svg>
-							<TextInput
-								style={
-									styles.input
-								}
-								placeholder="EMP-12345678"
-								placeholderTextColor={
-									AppColors.textMuted
-								}
-								value={idNumber}
-								onChangeText={
-									setIdNumber
-								}
-								autoCapitalize="characters"
-							/>
-						</View>
-					</>
-				) : (
-					<>
-						<Text style={styles.inputLabel}>
-							Employee Companion Name
+							Male
 						</Text>
-						<View
-							style={
-								styles.inputContainer
-							}
+					</Pressable>
+					<Pressable
+						style={[
+							styles.toggleButton,
+							gender === "female" &&
+								styles.toggleActive,
+						]}
+						onPress={() =>
+							setGender(
+								gender ===
+									"female"
+									? ""
+									: "female",
+							)
+						}
+					>
+						<Text
+							style={[
+								styles.toggleText,
+								gender ===
+									"female" &&
+									styles.toggleTextActive,
+							]}
 						>
-							<Svg
-								width={20}
-								height={20}
-								viewBox="0 0 24 24"
-								fill="none"
-							>
-								<Path
-									d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2M12 11a4 4 0 100-8 4 4 0 000 8z"
-									stroke={
-										AppColors.textMuted
-									}
-									strokeWidth={
-										1.5
-									}
-									strokeLinecap="round"
-								/>
-							</Svg>
-							<TextInput
-								style={
-									styles.input
-								}
-								placeholder="Companion's full name"
-								placeholderTextColor={
-									AppColors.textMuted
-								}
-								value={
-									companionName
-								}
-								onChangeText={
-									setCompanionName
-								}
-								autoCapitalize="words"
-							/>
-						</View>
+							Female
+						</Text>
+					</Pressable>
+					<Pressable
+						style={[
+							styles.toggleButton,
+							gender === "other" &&
+								styles.toggleActive,
+						]}
+						onPress={() =>
+							setGender(
+								gender ===
+									"other"
+									? ""
+									: "other",
+							)
+						}
+					>
+						<Text
+							style={[
+								styles.toggleText,
+								gender ===
+									"other" &&
+									styles.toggleTextActive,
+							]}
+						>
+							Other
+						</Text>
+					</Pressable>
+				</View>
 
-						<Text style={styles.inputLabel}>
-							Phone Number (Optional)
-						</Text>
-						<View
-							style={
-								styles.inputContainer
-							}
-						>
-							<Svg
-								width={20}
-								height={20}
-								viewBox="0 0 24 24"
-								fill="none"
-							>
-								<Path
-									d="M22 16.92v3a2 2 0 01-2.18 2A19.79 19.79 0 013.08 5.18 2 2 0 015.08 3h3a2 2 0 012 1.72c.13.81.36 1.6.68 2.34a2 2 0 01-.45 2.11L8.09 11.4a16 16 0 006.5 6.5l2.23-2.22a2 2 0 012.11-.45c.74.32 1.53.55 2.34.68a2 2 0 011.72 2z"
-									stroke={
-										AppColors.textMuted
-									}
-									strokeWidth={
-										1.5
-									}
-									fill="none"
-								/>
-							</Svg>
-							<TextInput
-								style={
-									styles.input
-								}
-								placeholder="+44 712 345 6789"
-								placeholderTextColor={
-									AppColors.textMuted
-								}
-								value={phone}
-								onChangeText={
-									setPhone
-								}
-								keyboardType="phone-pad"
-							/>
-						</View>
-					</>
-				)}
+				<Text style={styles.inputLabel}>
+					Date of Birth (Optional)
+				</Text>
+				<View style={styles.inputContainer}>
+					<TextInput
+						style={styles.input}
+						placeholder="YYYY-MM-DD"
+						placeholderTextColor={
+							AppColors.textMuted
+						}
+						value={dob}
+						onChangeText={setDob}
+						autoCapitalize="none"
+						autoCorrect={false}
+					/>
+				</View>
+
+				<Text style={styles.inputLabel}>
+					Email (Optional)
+				</Text>
+				<View style={styles.inputContainer}>
+					<TextInput
+						style={styles.input}
+						placeholder="user@example.com"
+						placeholderTextColor={
+							AppColors.textMuted
+						}
+						value={email}
+						onChangeText={setEmail}
+						autoCapitalize="none"
+						autoCorrect={false}
+						keyboardType="email-address"
+					/>
+				</View>
+
+				<Text style={styles.inputLabel}>
+					Phone (Optional)
+				</Text>
+				<View style={styles.inputContainer}>
+					<TextInput
+						style={styles.input}
+						placeholder="+1 555 000 0000"
+						placeholderTextColor={
+							AppColors.textMuted
+						}
+						value={phone}
+						onChangeText={setPhone}
+						keyboardType="phone-pad"
+					/>
+				</View>
 
 				{error ? (
 					<View
@@ -435,7 +420,6 @@ export default function IdentityVerificationScreen() {
 					</View>
 				) : null}
 
-				{/* Info card */}
 				<View style={styles.infoCard}>
 					<View style={styles.infoCardHeader}>
 						<View style={styles.infoIcon}>
@@ -473,13 +457,11 @@ export default function IdentityVerificationScreen() {
 					</View>
 					<Text style={styles.infoText}>
 						Verification ensures a secure
-						environment for all employees
-						and authorized visitors within
-						the premises.
+						environment for employees and
+						authorized visitors.
 					</Text>
 				</View>
 
-				{/* Continue button */}
 				<Pressable
 					style={({ pressed }) => [
 						styles.continueButton,

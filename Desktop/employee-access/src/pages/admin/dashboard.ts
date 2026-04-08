@@ -1,5 +1,6 @@
 import { View, navigate } from "../../renderer";
 import { createEmployeeManager } from "./employee-manager";
+import { createProfileManager } from "./profile-manager";
 import { createVisitorManager } from "./visitor-manager";
 import { createKioskIdleScreen } from "../kiosk/idle";
 
@@ -26,6 +27,10 @@ export const createAdminDashboard = (): View => {
 	linkVisitors.className = "admin-nav-link";
 	linkVisitors.textContent = "Visitors";
 
+	const linkProfile = document.createElement("a");
+	linkProfile.className = "admin-nav-link";
+	linkProfile.textContent = "Profile";
+
 	const linkSystem = document.createElement("a");
 	linkSystem.className = "admin-nav-link text-danger";
 	linkSystem.textContent = "Lock Kiosk";
@@ -34,7 +39,7 @@ export const createAdminDashboard = (): View => {
 		void navigate(createKioskIdleScreen);
 	});
 
-	navContainer.append(linkEmployees, linkVisitors, linkSystem);
+	navContainer.append(linkEmployees, linkVisitors, linkProfile, linkSystem);
 	sidebar.append(logo, navContainer);
 
 	// --- Main Content ---
@@ -82,6 +87,15 @@ export const createAdminDashboard = (): View => {
 		);
 		linkVisitors.classList.add("active");
 		void loadAdminView(createVisitorManager);
+	});
+
+	linkProfile.addEventListener("click", (e) => {
+		e.preventDefault();
+		document.querySelectorAll(".admin-nav-link").forEach((n) =>
+			n.classList.remove("active"),
+		);
+		linkProfile.classList.add("active");
+		void loadAdminView(createProfileManager);
 	});
 
 	return {
