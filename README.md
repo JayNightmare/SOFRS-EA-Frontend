@@ -5,15 +5,16 @@ This repo will be for the Smart Office Face Recognition System for Employee Acce
 ## Table of Contents
 
 - [SOFRS-EA - Frontend](#sofrs-ea---frontend)
-  - [Table of Contents](#table-of-contents)
-  - [Project Structure](#project-structure)
-  - [Setup Node (AI Computer)](#setup-node-ai-computer)
-  - [Team](#team)
-    - [Team Lead](#team-lead)
-    - [Backend Developer](#backend-developer)
-    - [DevOps Engineer](#devops-engineer)
-    - [Data Scientist](#data-scientist)
-    - [Frontend Developer](#frontend-developer)
+     - [Table of Contents](#table-of-contents)
+     - [Project Structure](#project-structure)
+     - [Reference Documentation](#reference-documentation)
+     - [Setup Node (AI Computer)](#setup-node-ai-computer)
+     - [Team](#team)
+          - [Team Lead](#team-lead)
+          - [Backend Developer](#backend-developer)
+          - [DevOps Engineer](#devops-engineer)
+          - [Data Scientist](#data-scientist)
+          - [Frontend Developer](#frontend-developer)
 
 ## Project Structure
 
@@ -23,6 +24,18 @@ This repository contains the following main components:
 
 - **`Desktop/employee-access/`**: The Electron and Vite-based desktop application for employee access management.
 - **`Mobile/employee-access/`**: The React Native (Expo) mobile application providing the mobile frontend interface for onboarding, facial scanning, and employee badge generation.
+
+## Reference Documentation
+
+Report-ready technical references are available under [`docs/`](docs/):
+
+- [`docs/EXECUTIVE_SUMMARY.md`](docs/EXECUTIVE_SUMMARY.md): High-level summary suitable for report introductions.
+- [`docs/SYSTEM_OVERVIEW.md`](docs/SYSTEM_OVERVIEW.md): End-to-end architecture and responsibilities.
+- [`docs/BACKEND_REFERENCE.md`](docs/BACKEND_REFERENCE.md): Backend logic, schemas, API contracts, and recognition pipeline.
+- [`docs/FRONTEND_REFERENCE.md`](docs/FRONTEND_REFERENCE.md): Desktop and mobile frontend architecture and backend integration.
+- [`docs/INTEGRATION_FLOWS.md`](docs/INTEGRATION_FLOWS.md): Sequence-style flows and payload examples for enrollment and recognition.
+- [`docs/REPORT_TRACEABILITY_MATRIX.md`](docs/REPORT_TRACEABILITY_MATRIX.md): Claim-to-source mapping for report citations.
+- [`docs/API_RESPONSE_SCHEMA_APPENDIX.md`](docs/API_RESPONSE_SCHEMA_APPENDIX.md): JSON schema appendix for major API responses.
 
 ## Setup Node (AI Computer)
 

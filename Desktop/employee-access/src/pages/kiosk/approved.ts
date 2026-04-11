@@ -80,7 +80,9 @@ export const createKioskApprovedScreen = (
 		void navigate(createAdminDashboard);
 	});
 
-	actions.append(scanAgainButton, continueDashboardButton, returnHomeButton);
+	console.log(`Approved Response: ${JSON.stringify(response)}`);
+	console.log(`Is Employee ID a Visitor? ${response.employee?.id?.startsWith("VA")}`);
+	actions.append(scanAgainButton, (response.employee?.id?.startsWith("VA") ? "" : continueDashboardButton), returnHomeButton);
 
 	body.append(iconBox, headings, cards, footer, actions);
 	main.append(body);

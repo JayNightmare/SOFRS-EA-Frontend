@@ -767,8 +767,10 @@ export const createKioskScanScreen = (mode: 'check-in' | 'check-out'): View => {
         'The captured image was kept on screen because the API request failed.',
       );
       verifying = false;
+      setRescanLocked(false);
     } finally {
       detecting = false;
+      setRescanLocked(false);
     }
   };
 
