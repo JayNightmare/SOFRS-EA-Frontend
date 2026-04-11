@@ -157,11 +157,11 @@ sequenceDiagram
 
 When writing report claims, cross-reference these implementation points:
 
-1. Backend orchestration: Backend/SOFRS-EA-Backend/backend/routers/Image.py
-2. Search logic: Backend/SOFRS-EA-Backend/backend/utils/identity/searchId.py
-3. Verification logic: Backend/SOFRS-EA-Backend/backend/utils/identity/verifyId.py
-4. Desktop recognition mapping: Desktop/employee-access/src/services/verification.ts
-5. Mobile capture/upload flow: Mobile/employee-access/app/face-scan.tsx
+1. Backend orchestration: [search_image endpoint](../Backend/SOFRS-EA-Backend/backend/routers/Image.py#L507)
+2. Search logic: [search_identity](../Backend/SOFRS-EA-Backend/backend/utils/identity/searchId.py#L154)
+3. Verification logic: [verify_identity](../Backend/SOFRS-EA-Backend/backend/utils/identity/verifyId.py#L170)
+4. Desktop recognition mapping: [mapResponse](../Desktop/employee-access/src/services/verification.ts#L172)
+5. Mobile capture/upload flow: [face upload path](../Mobile/employee-access/app/face-scan.tsx#L167)
 
 ## Assumptions and Limitations
 
